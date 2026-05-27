@@ -1,0 +1,78 @@
+cff-version: 1.2.0
+title: >-
+  Aletheia: an open-source quality-control pipeline for QC dilution-based
+  feature filtering in untargeted LC–MS metabolomics and lipidomics
+message: >-
+  If you use this software in research, please cite both the software itself
+  (this metadata) and the accompanying publication (preferred-citation below).
+type: software
+authors:
+  - given-names: Ángela
+    family-names: Peralbo-Molina
+    email: angela.peralbo@imibic.org
+    affiliation: >-
+      ECAI Mass Spectrometry and Molecular Imaging (IMSMI), Instituto Maimónides de
+      Investigación Biomédica de Córdoba (IMIBIC), Hospital Universitario
+      Reina Sofía / Universidad de Córdoba, Córdoba, Spain.
+    orcid: "https://orcid.org/0000-0000-0000-0000"        # [INSERT: ORCID]
+  - given-names: Cristina
+    family-names: López-Vázquez
+    affiliation: >-
+      ECAI Mass Spectrometry and Molecular Imaging (IMSMI), Instituto Maimónides de
+      Investigación Biomédica de Córdoba (IMIBIC), Córdoba, Spain.
+  - given-names: Ana
+    family-names: Salinas-Gavilán
+    affiliation: >-
+      ECAI Mass Spectrometry and Molecular Imaging (IMSMI), Instituto Maimónides de
+      Investigación Biomédica de Córdoba (IMIBIC), Córdoba, Spain.
+  - given-names: Eduardo
+    family-names: Chicano-Gálvez
+    affiliation: >-
+      ECAI Mass Spectrometry and Molecular Imaging (IMSMI), Instituto Maimónides de
+      Investigación Biomédica de Córdoba (IMIBIC), Córdoba, Spain.
+abstract: >-
+  Aletheia is an open-source Python/Dash pipeline for quality-control
+  filtering of untargeted LC–MS metabolomics and lipidomics datasets. It
+  performs per-feature linearity assessment against QC dilution series,
+  a two-tier replicate-injection diagnostic, %CV/ICC repeatability filtering,
+  and emits curated feature tables together with a fully auditable per-feature
+  decision log. Accepts CSV exports from Bruker MetaboScape, MZmine 3, XCMS
+  and MS-DIAL, plus a generic CSV loader with manual sample mapping.
+version: 1.0.0-dev
+date-released: "2026-05-13"                              # [INSERT: release date]
+license: MIT
+repository-code: "https://github.com/aperalbom/Aletheia"
+url: "https://github.com/aperalbom/Aletheia"
+keywords:
+  - metabolomics
+  - lipidomics
+  - lc-ms
+  - mass-spectrometry
+  - quality-control
+  - qc-dilution-series
+  - linearity-assessment
+  - replicate-diagnostic
+  - bruker-metaboscape
+  - mzmine
+  - xcms
+  - ms-dial
+  - python
+  - dash
+  - reproducible-research
+preferred-citation:
+  type: article
+  title: >-
+    Aletheia: an open-source quality-control pipeline for QC dilution-based
+    feature filtering in untargeted LC–MS metabolomics and lipidomics
+  authors:
+    - given-names: Ángela
+      family-names: Peralbo-Molina
+    - given-names: Cristina
+      family-names: López-Vázquez
+    - given-names: Ana
+      family-names: Salinas-Gavilán
+    - given-names: Eduardo
+      family-names: Chicano-Gálvez
+  journal: Metabolomics
+  year: 2026                                              # [INSERT: when accepted]
+  doi: "10.0000/0000"                                     # [INSERT: paper DOI]

@@ -1,0 +1,20 @@
+# =====================================================================
+# Aletheia — runtime requirements
+# =====================================================================
+# For most users:  pip install -e .              (preferred — uses pyproject.toml)
+# Bare requirements (Docker / CI / pinned envs):  pip install -r requirements.txt
+#
+# Optional report-generation extras are not pinned here; install them with
+# `pip install -e .[full]` or directly:
+#     reportlab>=4.0  svglib>=1.5  python-docx>=1.0  openpyxl>=3.1  scikit-learn>=1.3
+# =====================================================================
+
+# --- core ------------------------------------------------------------
+dash>=2.14
+plotly>=5.18
+flask>=3.0
+
+# --- data + numerics -------------------------------------------------
+pandas>=2.0
+numpy>=1.24
+scipy>=1.10
