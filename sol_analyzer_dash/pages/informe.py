@@ -602,7 +602,8 @@ def _mm_processing_en(tipo, polaridad, r2, modo_filtrado, dil_levels,
               "acceptance was granted if the slope was positive, without requiring a minimum R², "
               "since with two points the fit is perfect by definition. ") if allow2pt else ""
     is_txt = ("Features with a negative slope but R² ≥ threshold were flagged as potential "
-              "ion suppression candidates and retained with an 'ion_suppression' label. ") if ion_sup else ""
+              "non-monotonic dilution-response candidates and retained with a "
+              "'non_monotonic_response' reason code. ") if ion_sup else ""
 
     cv_section = ""
     if usar_cv:
@@ -730,7 +731,7 @@ def layout():
                           dcc.Checklist(id="inf-opts",
                               options=[{"label":" Drop lowest","value":"drop"},
                                        {"label":" 2 puntos → aceptar","value":"a2p"},
-                                       {"label":" Ion suppression","value":"ionsup"}],
+                                       {"label":" Non-monotonic response","value":"ionsup"}],
                               value=["drop","a2p"],
                               style={"fontSize":"12px","display":"flex","gap":"1rem"})]),
             ]),

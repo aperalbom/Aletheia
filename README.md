@@ -17,7 +17,7 @@ per-feature decisions that are otherwise made by ad-hoc spreadsheets.
 For every feature, Aletheia performs an exhaustive search across replicate-
 aggregation strategies × drop-lowest-dilution variants, retaining the
 regression that maximises **R² with positive slope** against a QC dilution
-series, and flags candidate **ion-suppression** entities. A two-tier
+series, and flags candidate **non-monotonic dilution-response** entities. A two-tier
 replicate-injection diagnostic (global failure + per-feature Z-score outliers)
 and **%CV / ICC** filters close the loop, emitting curated feature tables
 together with a fully auditable per-feature decision log.
@@ -64,8 +64,8 @@ together with a fully auditable per-feature decision log.
 - **Multi-format ingestion** (MetaboScape · MZmine 3 · XCMS · MS-DIAL · generic
   CSV) with auto-detection and a Sample-Mapping editor for role refinement.
 - **Auditable outputs**: every per-feature decision is exported with a
-  machine-readable reason code (`r2_ok`, `ion_suppression`, `only_2_points`,
-  `negative_slope`, `r2_low`, `no_data`).
+  machine-readable reason code (`r2_ok`, `2pt_pos_slope`,
+  `non_monotonic_response`, `negative_slope`, `r2_low`, `no_data`).
 
 ## Supported input formats
 
@@ -132,7 +132,7 @@ aletheia run path/to/file.csv \
   --out results/ \
   --format msdial \
   --r2 0.65 --cv 20 \
-  --use-drop --allow-2pt --ion-suppression
+  --use-drop --allow-2pt --flag-non-monotonic
 
 # Detect the format without running anything
 aletheia sniff path/to/file.csv

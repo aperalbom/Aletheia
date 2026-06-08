@@ -135,6 +135,30 @@ HPLC_METHODS = {
             "held at 95% until 47 min; total run time: 47 min"
         ),
     },
+    # Bruker PepSep® Advanced C18 — 1.5 µm particles (Part No. 1919826).
+    # Same gradient profile as the 1.7-µm Aurora Ultimate above; the only
+    # change is the analytical column (smaller particles → higher chromatographic
+    # resolution at the cost of higher backpressure; rated up to 1000 bar).
+    "nanoelute2_36min_15um": {
+        "label": "nanoElute 2 — PepSep® Advanced C18 25 cm × 75 µm, 1.5 µm · 47 min total · 250 nL/min · 50 °C",
+        "short_label": "nanoElute 2 · PepSep Advanced 1.5 µm · 47 min · 250 nL/min",
+        "system": "nanoElute 2 (Bruker)",
+        "column": (
+            "PepSep® Advanced C18 column (25 cm × 75 µm, 1.5 µm particles, "
+            "100 Å pore size, 400 m²/g surface area; Bruker Part No. 1919826), "
+            "equipped with the patented nanoConnect® outlet and rated for "
+            "ultra-high-pressure operation up to 1000 bar"
+        ),
+        "temperature": "50 °C",
+        "flow_rate": "250 nL/min",
+        "mobile_phases": "A = 0.1% formic acid in water; B = 0.1% formic acid in acetonitrile",
+        "gradient_label": "47-min gradient",
+        "gradient_total_min": 47,
+        "gradient_description": (
+            "2% B → 25% B at 30 min → 37% B at 36 min → 95% B at 37 min, "
+            "held at 95% until 47 min; total run time: 47 min"
+        ),
+    },
 }
 DEFAULT_HPLC_METHOD = "nanoelute2_36min"
 
@@ -2207,4 +2231,36 @@ def _export_docx(n, sol, user, inst, email, rdate, genby,
         _ce_idx   = _raw_cols.index('CE [eV]') if 'CE [eV]' in _raw_cols else None
         _t_cols   = [c for c in _raw_cols if c != 'CE [eV]']
         if _ce_idx is not None:
-            _t_r
+            _t_rows = [[v for j, v in enumerate(row) if j != _ce_idx]
+                       for row in pyd['txt_rows']]
+        else:
+            _t_rows = pyd['txt_rows']
+        table_from_df_rows(
+            doc, _t_rows, _t_cols,
+            caption="Table 2. DIA-PASEF acquisition windows and collision energies.",
+        )
+
+    # ── Serialize document and trigger download ──────────────────────────
+    import io as _io
+    buf = _io.BytesIO()
+    try:
+        doc.save(buf)
+    except Exception as exc:
+        return None, html.Div(
+            f"❌ Could not serialize the report: {exc}",
+            style={"color": "#C0756A"},
+        )
+    buf.seek(0)
+
+    # Filename: <sol>_proteomics_report.docx (sanitised)
+    import re as _re
+    safe_sol = _re.sub(r"[^A-Za-z0-9_\-]+", "_", str(sol or "proteomics")).strip("_") or "proteomics"
+    fname = f"{safe_sol}_proteomics_report.docx"
+
+    return (
+        dcc.send_bytes(buf.read(), fname),
+        html.Div(
+            f"✓ Report '{fname}' generated successfully.",
+            style={"color": "#2F6E66", "fontWeight": "bold"},
+        ),
+    )

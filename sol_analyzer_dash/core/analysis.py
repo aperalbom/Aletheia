@@ -124,9 +124,9 @@ def _evaluate_lin(pairs, threshold, allow2pt, ion_sup=False):
         return dict(ok=False, r2=None, reason="no_data")
     if slope <= 0:
         if ion_sup and n >= 3 and r2 is not None and r2 >= threshold:
-            return dict(ok=True, r2=r2, reason="ion_suppression")
+            return dict(ok=True, r2=r2, reason="non_monotonic_response")
         if ion_sup and n == 2:
-            return dict(ok=True, r2=1.0, reason="ion_suppression")
+            return dict(ok=True, r2=1.0, reason="non_monotonic_response")
         return dict(ok=False, r2=None, reason="negative_slope")
     if n == 1: return dict(ok=False, r2=None, reason="only_1_point")
     if n == 2:
@@ -319,8 +319,8 @@ def run_m1(parsed: dict, r2_threshold=0.6, allow2pt=True, use_drop=True, ion_sup
         r2_neg = best_r2_neg_val
         ion_mask = neg_mask & ~np.isnan(r2_neg) & (r2_neg >= r2_threshold)
         ok     = np.where(ion_mask, True, ok)
-        reason = np.where(ion_mask, "ion_suppression", reason)
-        # Para ion suppression, usar su R² real en el dataframe
+        reason = np.where(ion_mask, "non_monotonic_response", reason)
+        # Para non-monotonic response, usar su R² real en el dataframe
         r2v    = np.where(ion_mask, r2_neg, r2v)
         neg_only = neg_mask & ~ion_mask
     else:

@@ -159,7 +159,7 @@ def cmd_run(args: argparse.Namespace) -> int:
     print(
         f"[2/4] linearity filter (R² ≥ {args.r2}, "
         f"drop_lowest={args.use_drop}, allow_2pt={args.allow_2pt}, "
-        f"ion_suppression={args.ion_suppression}) …",
+        f"flag_non_monotonic={args.flag_non_monotonic}) …",
         file=sys.stderr,
     )
     try:
@@ -168,7 +168,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             r2_threshold=args.r2,
             allow2pt=args.allow_2pt,
             use_drop=args.use_drop,
-            ion_sup=args.ion_suppression,
+            ion_sup=args.flag_non_monotonic,
         )
     except Exception as e:
         print(f"error: run_m1 failed: {e}", file=sys.stderr)
@@ -219,7 +219,7 @@ def cmd_run(args: argparse.Namespace) -> int:
             "cv_threshold":      args.cv,
             "use_drop":          bool(args.use_drop),
             "allow_2pt":         bool(args.allow_2pt),
-            "ion_suppression":   bool(args.ion_suppression),
+            "flag_non_monotonic": bool(args.flag_non_monotonic),
             "injection_threshold": args.injection_threshold,
         },
     }
@@ -281,8 +281,10 @@ def build_parser() -> argparse.ArgumentParser:
                         help="accept features with exactly two valid points.")
     p_run.add_argument("--no-allow-2pt", dest="allow_2pt", action="store_false",
                         help="reject two-point features.")
-    p_run.add_argument("--ion-suppression", action="store_true", default=False,
-                        help="flag candidate ion-suppression entities.")
+    p_run.add_argument("--flag-non-monotonic", action="store_true", default=False,
+                        help="retain features with non-monotonic dilution-response "
+                             "(R² ≥ threshold but negative slope) under reason code "
+                             "'non_monotonic_response' instead of rejecting them.")
     p_run.set_defaults(func=cmd_run)
 
     return p

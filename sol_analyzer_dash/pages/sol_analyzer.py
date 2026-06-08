@@ -111,7 +111,7 @@ def layout():
                     dcc.Checklist(id="sol-opts",
                         options=[{"label":" Drop lowest","value":"drop"},
                                  {"label":" 2pt → aceptar","value":"a2p"},
-                                 {"label":" Ion suppression","value":"ionsup"}],
+                                 {"label":" Non-monotonic response","value":"ionsup"}],
                         value=["drop","a2p"],
                         style={"fontSize":"12px","display":"flex",
                                "flexDirection":"column","gap":"4px"}),
@@ -284,13 +284,13 @@ def on_tab(tab, rkey):
 
 def _tab_m1(m1, N, rkey):
     good=m1["good"]; bad=m1["bad"]; nodat=m1["nodat"]; thr=m1["r2_threshold"]
-    n_is  = int((good["reason"]=="ion_suppression").sum()) if "reason" in good.columns else 0
+    n_is  = int((good["reason"]=="non_monotonic_response").sum()) if "reason" in good.columns else 0
     n_pos = len(good)-n_is
 
     lbls=[" Aceptados","Rechazados","Sin datos"]; vals=[len(good),len(bad),len(nodat)]
     cols=[PAL["good"],PAL["bad"],PAL["nodata"]]
     if n_is:
-        lbls.insert(1,"Ion supp."); vals.insert(1,n_is); cols.insert(1,PAL["amber"])
+        lbls.insert(1,"No monotónico"); vals.insert(1,n_is); cols.insert(1,PAL["amber"])
         vals[0]=n_pos
 
     fig_don=go.Figure(go.Pie(labels=lbls,values=vals,marker_colors=cols,
@@ -312,7 +312,7 @@ def _tab_m1(m1, N, rkey):
 
     RMAP={"negative_slope":"Pend. negativa","r2_low":"R² bajo","only_1_point":"1 punto",
           "no_data":"Sin señal","only_2_points":"2 puntos","r2_na":"R² N/A",
-          "ion_suppression":"Ion suppression"}
+          "non_monotonic_response":"No monotónico"}
     rej=m1["lin_df"][~m1["lin_df"]["ok"]]["reason"].map(RMAP).value_counts()
     fig_rej=go.Figure(go.Bar(x=rej.values,y=rej.index,orientation="h",
                              marker_color=PAL["bad"],opacity=.85))
@@ -327,10 +327,10 @@ def _tab_m1(m1, N, rkey):
 
     stats=html.Div(className="stat-grid stat-4",children=[
         stat(N,        "Total",       None,                                            "stat-muted"),
-        stat(n_pos,    "Aceptados",   f"{100*n_pos/N:.1f}%  ·  {n_pos}/{N}",          "stat-good"),
-        stat(len(bad), "Rechazados",  f"{100*len(bad)/N:.1f}%  ·  {len(bad)}/{N}",    "stat-bad"),
-        stat(len(nodat),"Sin datos",  f"{100*len(nodat)/N:.1f}%  ·  {len(nodat)}/{N}","stat-muted"),
-    ]+([stat(n_is,"Ion suppression",  f"{100*n_is/N:.1f}%  ·  {n_is}/{N}",            "stat-amber")] if n_is else []))
+        stat(n_pos,    "Aceptados",   f"{100*n_pos/(N or 1):.1f}%  ·  {n_pos}/{N}",          "stat-good"),
+        stat(len(bad), "Rechazados",  f"{100*len(bad)/(N or 1):.1f}%  ·  {len(bad)}/{N}",    "stat-bad"),
+        stat(len(nodat),"Sin datos",  f"{100*len(nodat)/(N or 1):.1f}%  ·  {len(nodat)}/{N}","stat-muted"),
+    ]+([stat(n_is,"Non-monotonic",  f"{100*n_is/(N or 1):.1f}%  ·  {n_is}/{N}",            "stat-amber")] if n_is else []))
 
     return html.Div([
         stats,
@@ -438,7 +438,7 @@ def _tab_qcr(qcr, N, rkey):
     n_total_reps = qcr["n_ok"] + qcr["n_suspect"] + qcr["n_fail"]
     stats=html.Div(className="stat-grid stat-4",children=[
         stat(qcr["n_ok"],            "Válidas",
-             f"{100*qcr['n_ok']/n_total_reps:.1f}%  ·  {qcr['n_ok']}/{n_total_reps}", "stat-good"),
+             f"{100*qcr['n_ok']/(n_total_reps or 1):.1f}%  ·  {qcr['n_ok']}/{n_total_reps}", "stat-good"),
         stat(qcr["n_suspect"],       "Sospechosas",
              f"1 criterio  ·  {qcr['n_suspect']}/{n_total_reps}",                      "stat-amber"),
         stat(qcr["n_fail"],          "Fallos",
@@ -522,8 +522,8 @@ def _tab_m2(m2, N, rkey):
             stat(n_ok_icc, "ICC > 0.75", "No aplicable", "stat-slate"),
         ])
     else:
-        cv_caption_ok  = f"{100*n_ok_cv/n_calc:.1f}%  ·  {n_ok_cv}/{n_calc}"
-        cv_caption_bad = f"{100*n_bad_cv/n_calc:.1f}%  ·  {n_bad_cv}/{n_calc}"
+        cv_caption_ok  = f"{100*n_ok_cv/(n_calc or 1):.1f}%  ·  {n_ok_cv}/{n_calc}"
+        cv_caption_bad = f"{100*n_bad_cv/(n_calc or 1):.1f}%  ·  {n_bad_cv}/{n_calc}"
         if n_na_cv:
             cv_caption_ok  += f"  ({n_na_cv} sin CV)"
             cv_caption_bad += f"  ({n_na_cv} sin CV)"
@@ -531,7 +531,7 @@ def _tab_m2(m2, N, rkey):
             stat(n_ok_cv,  f"CV ≤ {thr}%", cv_caption_ok,  "stat-good"),
             stat(n_bad_cv, f"CV > {thr}%", cv_caption_bad, "stat-bad"),
             stat(n_ok_icc, "ICC > 0.75",
-                 f"{100*n_ok_icc/N:.1f}%  ·  {n_ok_icc}/{N}", "stat-slate"),
+                 f"{100*n_ok_icc/(N or 1):.1f}%  ·  {n_ok_icc}/{N}", "stat-slate"),
         ])
 
     return html.Div([
@@ -619,9 +619,9 @@ def _tab_jt(m1, m2, N, rkey):
                           yaxis=dict(title="%CV (cap 100%)",gridcolor="#EBEBEB"))
 
     stats=html.Div(className="stat-grid stat-3",children=[
-        stat(n_both, "Pasan ambos",        f"{100*n_both/N:.1f}%  ·  {n_both}/{N}",  "stat-good"),
-        stat(n_lin,  "Pasan linealidad",   f"{100*n_lin/N:.1f}%  ·  {n_lin}/{N}",    "stat-slate"),
-        stat(n_cv,   f"Pasan CV≤{thr_cv}%",f"{100*n_cv/N:.1f}%  ·  {n_cv}/{N}",    "stat-amber"),
+        stat(n_both, "Pasan ambos",        f"{100*n_both/(N or 1):.1f}%  ·  {n_both}/{N}",  "stat-good"),
+        stat(n_lin,  "Pasan linealidad",   f"{100*n_lin/(N or 1):.1f}%  ·  {n_lin}/{N}",    "stat-slate"),
+        stat(n_cv,   f"Pasan CV≤{thr_cv}%",f"{100*n_cv/(N or 1):.1f}%  ·  {n_cv}/{N}",    "stat-amber"),
     ])
 
     return html.Div([
@@ -828,9 +828,9 @@ def _render_alt(d_orig, alt, alt_key):
         card(
             html.Div(className="stat-grid stat-3", children=[
                 stat(lin_o, "Aceptados (orig.)",
-                     f"{100*lin_o/N:.1f}%  ·  {lin_o}/{N}", "stat-muted"),
+                     f"{100*lin_o/(N or 1):.1f}%  ·  {lin_o}/{N}", "stat-muted"),
                 stat(lin_a, "Aceptados (alt.)",
-                     f"{100*lin_a/N:.1f}%  ·  {lin_a}/{N}",
+                     f"{100*lin_a/(N or 1):.1f}%  ·  {lin_a}/{N}",
                      "stat-good" if lin_a >= lin_o else "stat-amber"),
                 stat(lin_a - lin_o, "Δ M1",
                      f"{lin_a - lin_o:+d} metabolitos",
@@ -848,9 +848,9 @@ def _render_alt(d_orig, alt, alt_key):
         blocks.append(card(
             html.Div(className="stat-grid stat-3", children=[
                 stat(cv_o, f"CV ≤ {thr}% (orig.)",
-                     f"{100*cv_o/N:.1f}%  ·  {cv_o}/{N}", "stat-muted"),
+                     f"{100*cv_o/(N or 1):.1f}%  ·  {cv_o}/{N}", "stat-muted"),
                 stat(cv_a, f"CV ≤ {thr}% (alt.)",
-                     f"{100*cv_a/N:.1f}%  ·  {cv_a}/{N}",
+                     f"{100*cv_a/(N or 1):.1f}%  ·  {cv_a}/{N}",
                      "stat-good" if cv_a >= cv_o else "stat-amber"),
                 stat(cv_a - cv_o, "Δ M2",
                      f"{cv_a - cv_o:+d} metabolitos",

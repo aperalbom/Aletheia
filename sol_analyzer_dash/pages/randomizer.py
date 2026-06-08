@@ -231,6 +231,31 @@ def build_worklist(
     hela_vial:      str = "",
     hela_name:      str = "HeLa",
     hela_vol:       float | None = None,
+    # QC dilution-series block (untargeted metabolomics / lipidomics):
+    # inserted between the equilibration tips and the main sample sequence.
+    # Sandwiched by one pool-QC injection on each side so the block sits
+    # between known stability anchors. See Aletheia paper §2.6 for the
+    # design rationale.
+    #
+    # Two operational modes:
+    #   · "vials"  — 5 separately pre-diluted vials (one per QC level).
+    #                Each level gets its own physical vial (sequential
+    #                from `dil_vial_start`). Injection volume is constant
+    #                (`dil_vol`). This is the classic dilution-series setup.
+    #   · "volume" — single concentrated QC pool vial reused for all
+    #                dilutions; the dilution factor is achieved by varying
+    #                the *injection volume*. Effective volume per level is
+    #                `dil_base_vol × level / 100` (e.g. level 20 → 1 µL when
+    #                `dil_base_vol = 5`). All injections reuse `qc_vial`,
+    #                so `dil_vial_start` is ignored in this mode.
+    dil_enabled:    bool = False,
+    dil_mode:       str  = "vials",            # "vials" | "volume"
+    dil_levels:     list[int] | None = None,   # e.g. [20, 40, 60, 80, 100]
+    dil_replicates: int = 1,
+    dil_name_prefix: str = "QC",                # → QC20, QC40, …
+    dil_vial_start: str = "",
+    dil_vol:        float | None = None,
+    dil_base_vol:   float | None = None,        # only used when dil_mode="volume"
     duplicate_every: int = 0,
     seed:           int | None = None,
     sample_vol:     float = 2,
@@ -281,6 +306,33 @@ def build_worklist(
     duplicate_every = max(0, int(duplicate_every or 0))
     if hela_vol in ("", None):
         hela_vol = qc_vol
+
+    # ── QC dilution-series parameters ────────────────────────────────────
+    dil_enabled    = bool(dil_enabled)
+    dil_replicates = max(0, int(dil_replicates or 0))
+    dil_name_prefix = (dil_name_prefix or "QC").strip() or "QC"
+    dil_mode = (dil_mode or "vials").strip().lower()
+    if dil_mode not in ("vials", "volume"):
+        dil_mode = "vials"
+    # Default levels: standard QC dilution-series used by Aletheia (20/40/60/80/100 %)
+    if dil_levels is None:
+        dil_levels_clean: list[int] = [20, 40, 60, 80, 100]
+    else:
+        try:
+            dil_levels_clean = sorted(
+                int(x) for x in dil_levels if str(x).strip() != ""
+            )
+        except (TypeError, ValueError):
+            dil_levels_clean = []
+    if dil_vol in ("", None):
+        dil_vol = qc_vol
+    # Base volume for "volume" mode: max injection volume (= QC100). Defaults
+    # to the user-set dil_vol or qc_vol if neither was specified.
+    if dil_base_vol in ("", None):
+        dil_base_vol = dil_vol if dil_vol not in ("", None) else qc_vol
+    # Only actually build the block if all preconditions are met
+    do_dilution = (dil_enabled and dil_replicates > 0 and len(dil_levels_clean) > 0)
+
     rng = random.Random(seed if seed not in ("", None) else None)
 
     def _count_qc(n_samples: int) -> tuple[int, int]:
@@ -423,6 +475,67 @@ def build_worklist(
                               "is_qc": False, "is_hela": True,
                               "vol": hela_vol})
 
+    # ── QC dilution-series block (Elute/nanoElute, optional) ───────────
+    # Inserted between the equilibration block and the main sample
+    # sequence, sandwiched by one pool-QC injection on each side so the
+    # series is flanked by stability anchors. Order is ascending
+    # (QC20 → QC100) by convention — randomisation of the dilution
+    # levels is left to the downstream analyst if needed.
+    qcname = qc_name or "QC"
+    dilution_rows: list[dict] = []
+    if do_dilution:
+        # ── Mode A · "vials" — 5 pre-diluted vials, constant volume ────
+        # Each dilution level lives in its own physical vial. Vials are
+        # assigned sequentially from `dil_vial_start` (per-instrument
+        # iterator); placeholder labels are used if no start was given.
+        #
+        # ── Mode B · "volume" — single concentrated vial, variable volume ─
+        # All dilution rows share the main QC vial (`qc_vial_resolved`).
+        # The dilution factor is achieved by varying the *injection volume*:
+        # vol(level) = dil_base_vol × level / 100. So level 20 with
+        # base 5 µL → 1 µL, level 40 → 2 µL, …, level 100 → 5 µL.
+        if dil_mode == "vials":
+            dvs = (dil_vial_start or "").strip()
+            if dvs:
+                try:
+                    dil_positions = _positions_for(instrument, dvs)
+                    level_vials = {
+                        lvl: next(dil_positions, "—") for lvl in dil_levels_clean
+                    }
+                except Exception:
+                    level_vials = {
+                        lvl: f"[{dil_name_prefix}{lvl}]" for lvl in dil_levels_clean
+                    }
+            else:
+                level_vials = {
+                    lvl: f"[{dil_name_prefix}{lvl}]" for lvl in dil_levels_clean
+                }
+            level_vols = {lvl: dil_vol for lvl in dil_levels_clean}
+        else:  # dil_mode == "volume"
+            # Vials are resolved later (will match qc_vial_resolved); use a
+            # sentinel for now so the row dicts have a stable shape.
+            level_vials = {lvl: None for lvl in dil_levels_clean}
+            level_vols  = {lvl: round(float(dil_base_vol) * lvl / 100.0, 3)
+                           for lvl in dil_levels_clean}
+        # Pool QC at the start of the block (vial resolved with the main QC)
+        dilution_rows.append({"name": qcname, "vol": qc_vol,
+                              "is_qc": True, "is_hela": False, "is_dil": False})
+        # Each dilution level × replicates, ascending order
+        for lvl in dil_levels_clean:
+            dname = f"{dil_name_prefix}{lvl}"
+            for _ in range(dil_replicates):
+                dilution_rows.append({
+                    "name":     dname,
+                    "vial":     level_vials[lvl],   # may be None in "volume" mode
+                    "vol":      level_vols[lvl],
+                    "is_qc":    True,
+                    "is_hela":  False,
+                    "is_dil":   True,
+                })
+        # Pool QC at the end of the block
+        dilution_rows.append({"name": qcname, "vol": qc_vol,
+                              "is_qc": True, "is_hela": False, "is_dil": False})
+
     # ─── Elute / nanoElute: one vial per sample, shared by replicates ───
     # 1. Injection pool
     samples: list[str] = []
@@ -435,6 +548,8 @@ def build_worklist(
 
     # 3. Assemble the injection list with QC interleaving
     rows2: list[dict] = []
+    # qcname already defined above for the dilution block; keep this assignment
+    # for clarity / future-proofing (no-op if dilution block was skipped).
     qcname = qc_name or "QC"
     if qc_at_start:
         rows2.append({"name": qcname, "vol": qc_vol, "is_qc": True})
@@ -469,8 +584,23 @@ def build_worklist(
         else:
             r["vial"] = sample_to_vial.get(r["name"], "—")
         r.setdefault("is_hela", False)
+        r.setdefault("is_dil", False)
 
-    return hela_rows + rows2
+    # Resolve vials for the dilution block:
+    #   · Bookend pool-QCs always share the main QC vial.
+    #   · "vials" mode: dilution-level rows already carry their own vials.
+    #   · "volume" mode: dilution-level rows also use the main QC vial
+    #     (single concentrated pool with variable injection volume).
+    for r in dilution_rows:
+        if not r.get("is_dil"):
+            r["vial"] = qc_vial_resolved              # bookend pool-QC
+        elif r.get("vial") is None:                   # "volume" mode marker
+            r["vial"] = qc_vial_resolved
+        r.setdefault("is_hela", False)
+        r.setdefault("is_dil", False)
+
+    # Final order: equilibration → QC-dilution block → main sequence
+    return hela_rows + dilution_rows + rows2
 
 
 # =============================================================================
@@ -549,20 +679,41 @@ def layout():
             ]),
         ]),
 
-        _card("③ HeLa (equilibración al inicio)", [
+        _card("③ Equilibración al inicio (HeLa / estabilizadores)", [
+            # Analysis-type selector — pre-fills the equilibration name with
+            # HeLa (proteomics) or Stab_Metab / Stab_lipids (metab/lipid).
+            # The text field remains editable so any custom label is allowed.
+            _lbl("Tipo de análisis"),
+            dcc.RadioItems(
+                id="rnd-analysis-type",
+                options=[
+                    {"label": " Proteomics  (HeLa)",        "value": "proteomics"},
+                    {"label": " Metabolomics  (Stab_Metab)", "value": "metabolomics"},
+                    {"label": " Lipidomics  (Stab_lipids)",  "value": "lipidomics"},
+                    {"label": " Custom",                      "value": "custom"},
+                ],
+                value="proteomics",
+                inline=True,
+                labelStyle={"marginRight": "14px", "fontSize": "12px"},
+                style={"marginBottom": "8px"},
+            ),
             html.Div(style={"display": "grid",
-                            "gridTemplateColumns": "1fr 1fr",
+                            "gridTemplateColumns": "1fr 1fr 1fr",
                             "gap": "10px"}, children=[
-                html.Div([_lbl("Nº de inyecciones de HeLa (0 = ninguna)"),
+                html.Div([_lbl("Nº inyecciones (0 = ninguna)"),
                           dcc.Input(id="rnd-hela-count", type="number", value=10,
                                     min=0, step=1, style=_inp_style())]),
+                html.Div([_lbl("Nombre del bloque"),
+                          dcc.Input(id="rnd-hela-name", type="text", value="HeLa",
+                                    placeholder="HeLa / Stab_Metab / Stab_lipids",
+                                    style=_inp_style())]),
                 html.Div(id="rnd-hela-vol-wrap",
-                         children=[_lbl("Vol. HeLa (µL)"),
+                         children=[_lbl("Vol. inyección (µL)"),
                                    dcc.Input(id="rnd-hela-vol", type="number", value=2,
                                              min=0.1, step=0.1, style=_inp_style())]),
             ]),
             html.Div(id="rnd-hela-vial-label",
-                     children="Vial inicial de carga (HeLa)",
+                     children="Vial del estabilizador / HeLa (reutilizado en cada inyección)",
                      style={"fontSize": "10px", "fontWeight": "600",
                             "color": MUTED, "letterSpacing": ".03em",
                             "textTransform": "uppercase",
@@ -575,6 +726,90 @@ def layout():
             html.Div(id="rnd-hela-hint",
                      style={"fontSize": "10px", "color": MUTED,
                             "fontFamily": "monospace", "marginTop": "4px"}),
+        ]),
+
+        # ── ③.5 QC dilution-series block (untargeted metab/lipid only) ──
+        _card("③.5 Serie de dilución QC (metabolómica / lipidómica)", [
+            dcc.Checklist(
+                id="rnd-dil-enable",
+                options=[{"label": " Incluir bloque QC diluido (QC20–QC100)",
+                          "value": "on"}],
+                value=[],
+                inline=True,
+                labelStyle={"fontSize": "12px"},
+                style={"marginBottom": "8px"},
+            ),
+            html.Div(id="rnd-dil-controls", children=[
+                # Mode selector — choose between pre-diluted vials or
+                # variable-volume injection of a single concentrated vial.
+                _lbl("Modo de dilución"),
+                dcc.RadioItems(
+                    id="rnd-dil-mode",
+                    options=[
+                        {"label": " 5 viales pre-diluidos (vol. constante)",
+                         "value": "vials"},
+                        {"label": " 1 vial pool, volumen variable "
+                                  "(QC20=20% × vol base, etc.)",
+                         "value": "volume"},
+                    ],
+                    value="vials",
+                    labelStyle={"display": "block", "fontSize": "12px",
+                                "padding": "3px 0"},
+                    style={"marginBottom": "10px"},
+                ),
+                html.Div(style={"display": "grid",
+                                "gridTemplateColumns": "2fr 1fr 1fr",
+                                "gap": "10px"}, children=[
+                    html.Div([_lbl("Niveles de dilución (% pool, coma-separados)"),
+                              dcc.Input(id="rnd-dil-levels", type="text",
+                                        value="20, 40, 60, 80, 100",
+                                        placeholder="ej. 20, 40, 60, 80, 100",
+                                        style=_inp_style())]),
+                    html.Div([_lbl("Réplicas por nivel"),
+                              dcc.Input(id="rnd-dil-reps", type="number",
+                                        value=1, min=0, max=10, step=1,
+                                        style=_inp_style())]),
+                    # In "vials" mode this is the constant injection volume
+                    # for every dilution level. In "volume" mode this field
+                    # is hidden — `rnd-dil-base-vol` is used instead.
+                    html.Div(id="rnd-dil-vol-wrap",
+                             children=[_lbl("Vol. inyección (µL)"),
+                                       dcc.Input(id="rnd-dil-vol", type="number",
+                                                 value=2, min=0.1, step=0.1,
+                                                 style=_inp_style())]),
+                ]),
+                # Variable-volume mode controls (only visible in "volume" mode)
+                html.Div(id="rnd-dil-base-vol-wrap",
+                         style={"marginTop": "8px", "display": "none"},
+                         children=[
+                             _lbl("Volumen base = QC100 (µL); resto se escala "
+                                  "proporcional (QC20 = 20%, QC40 = 40%, …)"),
+                             dcc.Input(id="rnd-dil-base-vol", type="number",
+                                       value=5, min=0.1, step=0.1,
+                                       style=_inp_style()),
+                         ]),
+                html.Div([_lbl("Prefijo de nombre"),
+                          dcc.Input(id="rnd-dil-prefix", type="text",
+                                    value="QC",
+                                    placeholder="QC → QC20, QC40, …",
+                                    style=_inp_style())],
+                         style={"marginTop": "8px"}),
+                # Vial start only relevant in "vials" mode
+                html.Div(id="rnd-dil-vial-wrap",
+                         style={"marginTop": "8px"},
+                         children=[
+                             _lbl("Vial inicial de la serie de dilución"),
+                             dcc.Input(id="rnd-dil-vial-start", type="text",
+                                       value="",
+                                       placeholder="vacío → placeholders [QC20] · "
+                                                   "ej. 11 (Elute) o Slot1:50 (nanoElute)",
+                                       style=_inp_style()),
+                         ]),
+                html.Div(id="rnd-dil-hint",
+                         style={"fontSize": "10px", "color": MUTED,
+                                "fontFamily": "monospace", "marginTop": "8px",
+                                "lineHeight": "1.5"}),
+            ]),
         ]),
 
         _card("④ Equipo y posición", [
@@ -747,19 +982,20 @@ def _reset_initpos(instrument, current):
         "nanoelute": "vacío → usa la posición tras la última muestra",
     }[instrument]
     hela_label = {
-        "evosep":    "Posición inicial de carga de HeLa (p. ej. S1-A1; "
-                     "cada inyección ocupa una punta consecutiva)",
-        "elute":     "Vial de HeLa (reutilizado en cada inyección)",
-        "nanoelute": "Vial de HeLa (reutilizado en cada inyección)",
+        "evosep":    "Posición inicial de carga del bloque de equilibración "
+                     "(HeLa / estabilizador) — p. ej. S1-A1; "
+                     "cada inyección ocupa una punta consecutiva",
+        "elute":     "Vial del estabilizador / HeLa (reutilizado en cada inyección)",
+        "nanoelute": "Vial del estabilizador / HeLa (reutilizado en cada inyección)",
     }[instrument]
     hela_hint = {
-        "evosep":    ("Cada inyección de HeLa consume una punta distinta, "
-                      "cargadas desde la posición indicada (por defecto "
-                      "S1-A1)."),
-        "elute":     "Todas las inyecciones de HeLa comparten el mismo "
-                     "vial (por defecto 108).",
-        "nanoelute": "Todas las inyecciones de HeLa comparten el mismo "
-                     "vial (por defecto Slot2:54).",
+        "evosep":    ("Cada inyección del bloque de equilibración consume una "
+                      "punta distinta, cargadas desde la posición indicada "
+                      "(por defecto S1-A1)."),
+        "elute":     "Todas las inyecciones del bloque de equilibración "
+                     "comparten el mismo vial (por defecto 108).",
+        "nanoelute": "Todas las inyecciones del bloque de equilibración "
+                     "comparten el mismo vial (por defecto Slot2:54).",
     }[instrument]
     matches = {
         "evosep":    _EVOSEP_RE,
@@ -805,6 +1041,68 @@ def _reset_initpos(instrument, current):
             vol_samp_style, vol_qc_style, vol_hela_style, note_style)
 
 
+# ─── Auto-fill equilibration name when the analysis-type radio changes ────
+# This callback only runs when the radio is touched; the text field remains
+# fully editable afterwards (custom labels survive radio switches because
+# we don't override an already-customised value).
+_ANALYSIS_TYPE_NAMES = {
+    "proteomics":    "HeLa",
+    "metabolomics":  "Stab_Metab",
+    "lipidomics":    "Stab_lipids",
+    # custom: don't override whatever the user typed
+}
+
+
+# ─── Show/hide dilution-mode-specific fields + update the bottom hint ───
+@callback(
+    Output("rnd-dil-vol-wrap",      "style"),
+    Output("rnd-dil-base-vol-wrap", "style"),
+    Output("rnd-dil-vial-wrap",     "style"),
+    Output("rnd-dil-hint",          "children"),
+    Input("rnd-dil-mode", "value"),
+    prevent_initial_call=False,
+)
+def _toggle_dil_mode(mode):
+    base_style = {"marginTop": "8px"}
+    block_show = {"display": "block", "marginTop": "8px"}
+    hide       = {"display": "none"}
+    if mode == "volume":
+        # Volume-variable mode: single QC vial, varying injection µL
+        hint = ("Modo volumen: 1 vial del pool QC, inyectando volúmenes "
+                "escalados (QC20 = 20% × vol. base, …, QC100 = vol. base). "
+                "Todas las inyecciones diluidas comparten el mismo vial que "
+                "el pool QC. Bloque: 1 pool-QC · niveles × réplicas · 1 pool-QC.")
+        return ({**_inp_style(), "display": "none"},   # rnd-dil-vol-wrap hidden
+                block_show,                             # rnd-dil-base-vol-wrap visible
+                hide,                                   # rnd-dil-vial-wrap hidden
+                hint)
+    # Default: "vials" mode
+    hint = ("Modo viales: 5 viales pre-diluidos (uno por nivel), volumen "
+            "constante en cada inyección. Bloque: 1 pool-QC · niveles × "
+            "réplicas · 1 pool-QC. Se inserta entre la equilibración y la "
+            "secuencia principal. Solo Elute / nanoElute.")
+    return (block_show,             # rnd-dil-vol-wrap visible
+            hide,                   # rnd-dil-base-vol-wrap hidden
+            block_show,             # rnd-dil-vial-wrap visible
+            hint)
+
+
+@callback(
+    Output("rnd-hela-name", "value"),
+    Input("rnd-analysis-type", "value"),
+    State("rnd-hela-name", "value"),
+    prevent_initial_call=False,
+)
+def _autofill_hela_name(analysis_type, current):
+    default_name = _ANALYSIS_TYPE_NAMES.get(analysis_type or "proteomics")
+    if default_name is None:
+        # custom → preserve current value (or fall back to HeLa if blank)
+        return current or "HeLa"
+    # If the user is on a preset type, always show the canonical name
+    # (overwrites any prior custom edit — intentional, matches "preset" UX).
+    return default_name
+
+
 @callback(
     Output("rnd-rows-store",  "data"),
     Output("rnd-textarea",    "value"),
@@ -822,8 +1120,17 @@ def _reset_initpos(instrument, current):
     State("rnd-initpos",      "value"),
     State("rnd-qcvial",       "value"),
     State("rnd-hela-count",   "value"),
+    State("rnd-hela-name",    "value"),
     State("rnd-hela-vial",    "value"),
     State("rnd-hela-vol",     "value"),
+    State("rnd-dil-enable",     "value"),
+    State("rnd-dil-mode",       "value"),
+    State("rnd-dil-levels",     "value"),
+    State("rnd-dil-reps",       "value"),
+    State("rnd-dil-prefix",     "value"),
+    State("rnd-dil-vial-start", "value"),
+    State("rnd-dil-vol",        "value"),
+    State("rnd-dil-base-vol",   "value"),
     State("rnd-dupe-every",   "value"),
     State("rnd-seed",         "value"),
     State("rnd-vol-samp",     "value"),
@@ -832,7 +1139,10 @@ def _reset_initpos(instrument, current):
 )
 def _generate(n, prefix, n1, n2, reps, qcname, qcevery, qcends,
               instrument, initpos, qcvial,
-              helacount, helavial, helavol,
+              helacount, helaname, helavial, helavol,
+              dil_enable, dil_mode_val, dil_levels_str, dil_reps_val,
+              dil_prefix_val, dil_vial_start_val,
+              dil_vol_val, dil_base_vol_val,
               dupe_every,
               seed, vsamp, vqc):
     if not n:
@@ -851,6 +1161,29 @@ def _generate(n, prefix, n1, n2, reps, qcname, qcevery, qcends,
         hela_vol_val = (float(helavol)
                         if helavol not in ("", None) else None)
 
+    # Normalise the equilibration-block name: fall back to "HeLa" if blank.
+    hela_name_val = (helaname or "").strip() or "HeLa"
+
+    # Parse dilution-series controls
+    dil_on = "on" in (dil_enable or [])
+    dil_levels_list: list[int] = []
+    if dil_levels_str:
+        for tok in str(dil_levels_str).replace(";", ",").split(","):
+            tok = tok.strip()
+            if not tok:
+                continue
+            try:
+                dil_levels_list.append(int(float(tok)))
+            except ValueError:
+                pass
+    dil_vol_resolved = (float(dil_vol_val)
+                        if dil_vol_val not in ("", None) else None)
+    dil_base_vol_resolved = (float(dil_base_vol_val)
+                             if dil_base_vol_val not in ("", None) else None)
+    dil_mode_norm = (dil_mode_val or "vials").strip().lower()
+    if dil_mode_norm not in ("vials", "volume"):
+        dil_mode_norm = "vials"
+
     try:
         rows = build_worklist(
             sol_prefix=prefix or "",
@@ -866,7 +1199,16 @@ def _generate(n, prefix, n1, n2, reps, qcname, qcevery, qcends,
             qc_vial=(qcvial or "").strip(),
             hela_count=int(helacount or 0),
             hela_vial=(helavial or "").strip(),
+            hela_name=hela_name_val,
             hela_vol=hela_vol_val,
+            dil_enabled=dil_on,
+            dil_mode=dil_mode_norm,
+            dil_levels=dil_levels_list,
+            dil_replicates=int(dil_reps_val or 0),
+            dil_name_prefix=(dil_prefix_val or "QC").strip() or "QC",
+            dil_vial_start=(dil_vial_start_val or "").strip(),
+            dil_vol=dil_vol_resolved,
+            dil_base_vol=dil_base_vol_resolved,
             duplicate_every=int(dupe_every or 0),
             seed=int(seed) if seed not in ("", None) else None,
             sample_vol=samp_vol_val,
@@ -879,13 +1221,24 @@ def _generate(n, prefix, n1, n2, reps, qcname, qcevery, qcends,
     lines = [f"{r['vial']}\t{r['name']}\t{_fmt_vol(r['vol'])}" for r in rows]
     tsv_body = "Vial\tSample Name\tInj. Vol (uL)\n" + "\n".join(lines)
 
-    # Summary line
+    # Summary line — count dilution-block injections separately so the
+    # pool-QC count reflects only the regular intercalated/bookend QCs.
     n_samples = sum(1 for r in rows
                     if not r["is_qc"] and not r.get("is_hela"))
-    n_qc      = sum(1 for r in rows if r["is_qc"])
+    n_dil     = sum(1 for r in rows if r.get("is_dil"))
+    n_qc_pool = sum(1 for r in rows
+                    if r["is_qc"] and not r.get("is_dil"))
     n_hela    = sum(1 for r in rows if r.get("is_hela"))
-    summary   = (f"{len(rows)} inyecciones  ·  {n_samples} de muestra  ·  "
-                 f"{n_qc} QC  ·  {n_hela} HeLa  ·  equipo: {instrument}")
+    # Use the actual equilibration-block name (HeLa / Stab_Metab / Stab_lipids / ...).
+    parts = [f"{len(rows)} inyecciones",
+             f"{n_samples} de muestra",
+             f"{n_qc_pool} QC pool"]
+    if n_dil:
+        parts.append(f"{n_dil} QC diluido")
+    if n_hela:
+        parts.append(f"{n_hela} {hela_name_val}")
+    parts.append(f"equipo: {instrument}")
+    summary = "  ·  ".join(parts)
 
     # HTML preview table
     header = html.Tr([
@@ -912,6 +1265,7 @@ def _generate(n, prefix, n1, n2, reps, qcname, qcevery, qcends,
     table = html.Table(
         [html.Thead(header), html.Tbody(body_rows)],
         style={"width": "100%", "borderCollapse": "collapse",
+
                "fontSize": "11px", "fontFamily": "monospace"},
     )
 

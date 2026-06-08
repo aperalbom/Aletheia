@@ -382,5 +382,57 @@ def build_sidebar(current_path):
     ])
 
 
+
 # =============================================================================
-# LAYOUT PRINC
+# LAYOUT PRINCIPAL
+# =============================================================================
+
+app.layout = html.Div([
+    dcc.Location(id="url"),
+    html.Div(id="sidebar-container"),
+    html.Div(
+        dash.page_container,
+        id="page-content",
+    ),
+])
+
+
+@callback(
+    Output("sidebar-container", "children"),
+    Input("url", "pathname"),
+)
+def update_sidebar(pathname):
+    return build_sidebar(pathname or "/")
+
+
+# =============================================================================
+# ARRANQUE
+# =============================================================================
+
+if __name__ == "__main__":
+    import webbrowser, threading, time
+
+    port = 8050
+    url  = f"http://localhost:{port}"
+
+    def open_browser():
+        time.sleep(2.0)
+        try:
+            if sys.platform == "win32":
+                os.startfile(url)
+            else:
+                webbrowser.open(url)
+        except Exception:
+            pass
+
+    print(f"\n{'='*50}")
+    print(f"  Aletheia · IMSMI arrancando...")
+    print(f"  Abre en tu navegador: {url}")
+    print(f"{'='*50}\n", flush=True)
+
+    threading.Thread(target=open_browser, daemon=True).start()
+    # Dash 3.x and 4.x both support .run(); fall back to .run_server() for older 2.x.
+    run_method = getattr(app, "run", None) or getattr(app, "run_server", None)
+    if run_method is None:
+        raise RuntimeError("Cannot find app.run or app.run_server method on this Dash version")
+    run_method(debug=False, port=port, host="0.0.0.0")

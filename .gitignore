@@ -122,3 +122,5 @@ sol_analyzer_dash/data/sample_history.json
 # private/experimental.
 sol_analyzer_dash/_*.py
 sol_analyzer_dash/test_*.py
+*.pyc
+benchmark_aletheia_run/

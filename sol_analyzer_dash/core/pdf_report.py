@@ -36,14 +36,14 @@ def _pxy(extra=None):
 
 def _figs_m1(m1, N):
     good=m1["good"]; bad=m1["bad"]; nodat=m1["nodat"]; thr=m1["r2_threshold"]
-    n_is  = int((good["reason"]=="ion_suppression").sum()) if "reason" in good.columns else 0
+    n_is  = int((good["reason"]=="non_monotonic_response").sum()) if "reason" in good.columns else 0
     n_pos = len(good)-n_is
 
     # Donut
     lbls=[" Aceptados","Rechazados","Sin datos"]; vals=[len(good),len(bad),len(nodat)]
     cols_=[PAL["good"],PAL["bad"],PAL["nodata"]]
     if n_is:
-        lbls.insert(1,"Ion supp."); vals.insert(1,n_is); cols_.insert(1,PAL["amber"])
+        lbls.insert(1,"No monotónico"); vals.insert(1,n_is); cols_.insert(1,PAL["amber"])
         vals[0]=n_pos
     fig_don=go.Figure(go.Pie(labels=lbls,values=vals,marker_colors=cols_,hole=.6,
                               textinfo="percent",textposition="inside",
@@ -71,7 +71,8 @@ def _figs_m1(m1, N):
 
     # Motivos
     RMAP={"negative_slope":"Pend. negativa","r2_low":"R² bajo","only_1_point":"1 punto",
-          "no_data":"Sin señal","only_2_points":"2 puntos","r2_na":"R² N/A","ion_suppression":"Ion supp."}
+          "no_data":"Sin señal","only_2_points":"2 puntos","r2_na":"R² N/A",
+          "non_monotonic_response":"No monotónico"}
     rej=m1["lin_df"][~m1["lin_df"]["ok"]]["reason"].map(RMAP).value_counts()
     fig_rej=go.Figure(go.Bar(x=rej.values,y=rej.index,orientation="h",marker_color=PAL["bad"],opacity=.85))
     fig_rej.update_layout(**_pxy({"title":"M1 · Motivos de exclusión","height":280,"width":560}))
@@ -269,13 +270,13 @@ def build_pdf(data: dict, filename: str) -> bytes:
     # Tabla resumen portada
     n_good = len(m1["good"])
     n_bad  = len(m1["bad"])
-    n_is   = int((m1["good"]["reason"]=="ion_suppression").sum()) if "reason" in m1["good"].columns else 0
+    n_is   = int((m1["good"]["reason"]=="non_monotonic_response").sum()) if "reason" in m1["good"].columns else 0
     summary_data = [
         ["Parámetro", "Valor"],
         ["Total metabolitos", str(N)],
-        ["Aceptados linealidad", f"{n_good} ({100*n_good/N:.1f}%)"],
-        ["Rechazados", f"{n_bad} ({100*n_bad/N:.1f}%)"],
-        ["Ion suppression", f"{n_is}" if n_is else "—"],
+        ["Aceptados linealidad", f"{n_good} ({100*n_good/(N or 1):.1f}%)"],
+        ["Rechazados", f"{n_bad} ({100*n_bad/(N or 1):.1f}%)"],
+        ["No monotónico", f"{n_is}" if n_is else "—"],
         ["Réplicas válidas", f"{qcr['n_ok']} / {qcr['n_ok']+qcr['n_suspect']+qcr['n_fail']}"],
         ["Fallos de inyección", str(qcr["n_fail"])],
     ]
@@ -284,9 +285,9 @@ def build_pdf(data: dict, filename: str) -> bytes:
         n_icc   = int(np.sum(m2["icc_vec"] > .75))
         n_both  = int((m1["lin_df"]["ok"].values & m2["cv_df"]["CV_ok"].values).sum())
         summary_data += [
-            [f"CV ≤ {m2['cv_threshold']}%", f"{n_cv_ok} ({100*n_cv_ok/N:.1f}%)"],
-            ["ICC > 0.75", f"{n_icc} ({100*n_icc/N:.1f}%)"],
-            ["Pasan ambos criterios", f"{n_both} ({100*n_both/N:.1f}%)"],
+            [f"CV ≤ {m2['cv_threshold']}%", f"{n_cv_ok} ({100*n_cv_ok/(N or 1):.1f}%)"],
+            ["ICC > 0.75", f"{n_icc} ({100*n_icc/(N or 1):.1f}%)"],
+            ["Pasan ambos criterios", f"{n_both} ({100*n_both/(N or 1):.1f}%)"],
         ]
 
     tbl = Table(summary_data, colWidths=[9*cm, 8*cm])
@@ -546,7 +547,7 @@ def build_pdf(data: dict, filename: str) -> bytes:
         n_both_ = int((lin_ok & cv_ok).sum())
         story.append(Paragraph(
             f"Metabolitos que pasan ambos criterios (linealidad R²≥{m1['r2_threshold']} "
-            f"y CV≤{m2['cv_threshold']}%): {n_both_} ({100*n_both_/N:.1f}%).",
+            f"y CV≤{m2['cv_threshold']}%): {n_both_} ({100*n_both_/(N or 1):.1f}%).",
             body))
         story.append(Spacer(1, 0.2*cm))
 
@@ -638,13 +639,13 @@ def build_print_html(data: dict) -> str:
     # M1 — Linealidad
     # ═══════════════════════════════════════════════
     good=m1["good"]; bad=m1["bad"]; nodat=m1["nodat"]; thr=m1["r2_threshold"]
-    n_is  = int((good["reason"]=="ion_suppression").sum()) if "reason" in good.columns else 0
+    n_is  = int((good["reason"]=="non_monotonic_response").sum()) if "reason" in good.columns else 0
     n_pos = len(good) - n_is
 
     lbls=["Aceptados","Rechazados","Sin datos"]; vals=[len(good),len(bad),len(nodat)]
     cols_=[PAL["good"],PAL["bad"],PAL["nodata"]]
     if n_is:
-        lbls.insert(1,"Ion supp."); vals.insert(1,n_is)
+        lbls.insert(1,"No monotónico"); vals.insert(1,n_is)
         cols_.insert(1,PAL["amber"]); vals[0]=n_pos
 
     fig_don = go.Figure(go.Pie(
@@ -684,7 +685,7 @@ def build_print_html(data: dict) -> str:
 
     RMAP={"negative_slope":"Pend. negativa","r2_low":"R² bajo","only_1_point":"1 punto",
           "no_data":"Sin señal","only_2_points":"2 puntos","r2_na":"R² N/A",
-          "ion_suppression":"Ion supp."}
+          "non_monotonic_response":"No monotónico"}
     rej = m1["lin_df"][~m1["lin_df"]["ok"]]["reason"].map(RMAP).value_counts()
     fig_rej = go.Figure(go.Bar(x=rej.values, y=rej.index, orientation="h",
                                marker_color=PAL["bad"], opacity=.85,
@@ -692,10 +693,10 @@ def build_print_html(data: dict) -> str:
     fig_rej.update_layout(title="Motivos de exclusión", xaxis_title="n metabolitos")
 
     m1_stats = stat_row(
-        stat_card(n_pos,    "Aceptados",     f"{100*n_pos/N:.1f}% · {n_pos}/{N}",    "green"),
-        stat_card(len(bad), "Rechazados",    f"{100*len(bad)/N:.1f}% · {len(bad)}/{N}", "red"),
-        stat_card(len(nodat),"Sin datos",    f"{100*len(nodat)/N:.1f}%",              "gray"),
-        *([ stat_card(n_is, "Ion suppression", f"{100*n_is/N:.1f}%", "amber")] if n_is else [])
+        stat_card(n_pos,    "Aceptados",     f"{100*n_pos/(N or 1):.1f}% · {n_pos}/{N}",    "green"),
+        stat_card(len(bad), "Rechazados",    f"{100*len(bad)/(N or 1):.1f}% · {len(bad)}/{N}", "red"),
+        stat_card(len(nodat),"Sin datos",    f"{100*len(nodat)/(N or 1):.1f}%",              "gray"),
+        *([ stat_card(n_is, "Non-monotonic", f"{100*n_is/(N or 1):.1f}%", "amber")] if n_is else [])
     )
     m1_html = (m1_stats
                + two_cols(fh(fig_don,"Resumen"), fh(fig_his,"Distribución R²"))
@@ -732,7 +733,7 @@ def build_print_html(data: dict) -> str:
     n_total_r = qcr["n_ok"]+qcr["n_suspect"]+qcr["n_fail"]
     qcr_stats = stat_row(
         stat_card(qcr["n_ok"],      "Válidas",
-                  f"{100*qcr['n_ok']/n_total_r:.1f}% · {qcr['n_ok']}/{n_total_r}", "green"),
+                  f"{100*qcr['n_ok']/(n_total_r or 1):.1f}% · {qcr['n_ok']}/{n_total_r}", "green"),
         stat_card(qcr["n_suspect"], "Sospechosas", "1 criterio", "amber"),
         stat_card(qcr["n_fail"],    "Fallos",      "ambos criterios", "red"),
         stat_card(qcr["n_outlier_total"], "Outliers metab.", "réplicas válidas", "slate"),
@@ -788,9 +789,9 @@ def build_print_html(data: dict) -> str:
                                xaxis_title="ICC", yaxis_title="n metabolitos")
 
         m2_stats = stat_row(
-            stat_card(n_ok_cv,  f"CV ≤ {thr_cv}%", f"{100*n_ok_cv/N:.1f}% · {n_ok_cv}/{N}",  "green"),
-            stat_card(n_bad_cv, f"CV > {thr_cv}%",  f"{100*n_bad_cv/N:.1f}% · {n_bad_cv}/{N}", "red"),
-            stat_card(n_ok_icc, "ICC > 0.75",        f"{100*n_ok_icc/N:.1f}% · {n_ok_icc}/{N}", "slate"),
+            stat_card(n_ok_cv,  f"CV ≤ {thr_cv}%", f"{100*n_ok_cv/(N or 1):.1f}% · {n_ok_cv}/{N}",  "green"),
+            stat_card(n_bad_cv, f"CV > {thr_cv}%",  f"{100*n_bad_cv/(N or 1):.1f}% · {n_bad_cv}/{N}", "red"),
+            stat_card(n_ok_icc, "ICC > 0.75",        f"{100*n_ok_icc/(N or 1):.1f}% · {n_ok_icc}/{N}", "slate"),
         )
         m2_html = (m2_stats
                    + two_cols(fh(fig_box, "%CV por muestra"),
@@ -844,9 +845,9 @@ def build_print_html(data: dict) -> str:
                                plot_bgcolor="white", showlegend=False)
 
         jt_stats = stat_row(
-            stat_card(n_both, "Pasan ambos",       f"{100*n_both/N:.1f}% · {n_both}/{N}", "green"),
-            stat_card(n_lin,  "Pasan linealidad",  f"{100*n_lin/N:.1f}%",                 "slate"),
-            stat_card(n_cv,   f"Pasan CV≤{m2['cv_threshold']}%", f"{100*n_cv/N:.1f}%",   "amber"),
+            stat_card(n_both, "Pasan ambos",       f"{100*n_both/(N or 1):.1f}% · {n_both}/{N}", "green"),
+            stat_card(n_lin,  "Pasan linealidad",  f"{100*n_lin/(N or 1):.1f}%",                 "slate"),
+            stat_card(n_cv,   f"Pasan CV≤{m2['cv_threshold']}%", f"{100*n_cv/(N or 1):.1f}%",   "amber"),
         )
         jt_html = (jt_stats
                    + two_cols(fh(fig_rv, "R² vs %CV mediana"),
