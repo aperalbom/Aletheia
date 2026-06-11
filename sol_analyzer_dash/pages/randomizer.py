@@ -495,21 +495,28 @@ def build_worklist(
         # vol(level) = dil_base_vol × level / 100. So level 20 with
         # base 5 µL → 1 µL, level 40 → 2 µL, …, level 100 → 5 µL.
         if dil_mode == "vials":
+            # Physical convention: QC100 (100 % of the pool) IS the pool QC
+            # itself, so it shares the pool QC vial — only the strictly
+            # diluted levels (QC20, QC40, QC60, QC80, …) need their own
+            # physical vials. Sentinel `None` here is resolved later to
+            # `qc_vial_resolved` in the vial-assignment loop.
             dvs = (dil_vial_start or "").strip()
+            non_pool_levels = [lvl for lvl in dil_levels_clean if lvl != 100]
+            level_vials: dict[int, str | None] = {}
             if dvs:
                 try:
                     dil_positions = _positions_for(instrument, dvs)
-                    level_vials = {
-                        lvl: next(dil_positions, "—") for lvl in dil_levels_clean
-                    }
+                    for lvl in non_pool_levels:
+                        level_vials[lvl] = next(dil_positions, "—")
                 except Exception:
-                    level_vials = {
-                        lvl: f"[{dil_name_prefix}{lvl}]" for lvl in dil_levels_clean
-                    }
+                    for lvl in non_pool_levels:
+                        level_vials[lvl] = f"[{dil_name_prefix}{lvl}]"
             else:
-                level_vials = {
-                    lvl: f"[{dil_name_prefix}{lvl}]" for lvl in dil_levels_clean
-                }
+                for lvl in non_pool_levels:
+                    level_vials[lvl] = f"[{dil_name_prefix}{lvl}]"
+            # QC100 (if present in the dilution levels) re-uses the pool QC vial
+            if 100 in dil_levels_clean:
+                level_vials[100] = None   # → qc_vial_resolved later
             level_vols = {lvl: dil_vol for lvl in dil_levels_clean}
         else:  # dil_mode == "volume"
             # Vials are resolved later (will match qc_vial_resolved); use a
@@ -798,7 +805,8 @@ def layout():
                 html.Div(id="rnd-dil-vial-wrap",
                          style={"marginTop": "8px"},
                          children=[
-                             _lbl("Vial inicial de la serie de dilución"),
+                             _lbl("Vial inicial para QC20, QC40, … "
+                                  "(QC100 reutiliza el vial del pool QC)"),
                              dcc.Input(id="rnd-dil-vial-start", type="text",
                                        value="",
                                        placeholder="vacío → placeholders [QC20] · "

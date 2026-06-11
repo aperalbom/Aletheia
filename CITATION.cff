@@ -14,22 +14,25 @@ authors:
       ECAI Mass Spectrometry and Molecular Imaging (IMSMI), Instituto Maimónides de
       Investigación Biomédica de Córdoba (IMIBIC), Hospital Universitario
       Reina Sofía / Universidad de Córdoba, Córdoba, Spain.
-    orcid: "https://orcid.org/0000-0000-0000-0000"        # [INSERT: ORCID]
-  - given-names: Cristina
-    family-names: López-Vázquez
+    orcid: "https://orcid.org/0000-0001-7939-0029"
+  - given-names: Cristina María
+    family-names: López
     affiliation: >-
       ECAI Mass Spectrometry and Molecular Imaging (IMSMI), Instituto Maimónides de
       Investigación Biomédica de Córdoba (IMIBIC), Córdoba, Spain.
+    orcid: "https://orcid.org/0000-0001-8980-3106"
   - given-names: Ana
     family-names: Salinas-Gavilán
     affiliation: >-
       ECAI Mass Spectrometry and Molecular Imaging (IMSMI), Instituto Maimónides de
       Investigación Biomédica de Córdoba (IMIBIC), Córdoba, Spain.
+    orcid: "https://orcid.org/0009-0006-8815-1787"
   - given-names: Eduardo
     family-names: Chicano-Gálvez
     affiliation: >-
       ECAI Mass Spectrometry and Molecular Imaging (IMSMI), Instituto Maimónides de
       Investigación Biomédica de Córdoba (IMIBIC), Córdoba, Spain.
+    orcid: "https://orcid.org/0000-0002-9481-9628"
 abstract: >-
   Aletheia is an open-source Python/Dash pipeline for quality-control
   filtering of untargeted LC–MS metabolomics and lipidomics datasets. It
@@ -38,8 +41,8 @@ abstract: >-
   and emits curated feature tables together with a fully auditable per-feature
   decision log. Accepts CSV exports from Bruker MetaboScape, MZmine 3, XCMS
   and MS-DIAL, plus a generic CSV loader with manual sample mapping.
-version: 1.0.0-dev
-date-released: "2026-05-13"                              # [INSERT: release date]
+version: 1.0.0
+date-released: "2026-06-11"
 license: MIT
 repository-code: "https://github.com/aperalbom/Aletheia"
 url: "https://github.com/aperalbom/Aletheia"
@@ -59,6 +62,10 @@ keywords:
   - python
   - dash
   - reproducible-research
+identifiers:
+  - description: MetaboLights study accompanying this software
+    type: other
+    value: "MTBLS14744"
 preferred-citation:
   type: article
   title: >-
@@ -67,12 +74,16 @@ preferred-citation:
   authors:
     - given-names: Ángela
       family-names: Peralbo-Molina
-    - given-names: Cristina
-      family-names: López-Vázquez
+      orcid: "https://orcid.org/0000-0001-7939-0029"
+    - given-names: Cristina María
+      family-names: López
+      orcid: "https://orcid.org/0000-0001-8980-3106"
     - given-names: Ana
       family-names: Salinas-Gavilán
+      orcid: "https://orcid.org/0009-0006-8815-1787"
     - given-names: Eduardo
       family-names: Chicano-Gálvez
+      orcid: "https://orcid.org/0000-0002-9481-9628"
   journal: Metabolomics
-  year: 2026                                              # [INSERT: when accepted]
-  doi: "10.0000/0000"                                     # [INSERT: paper DOI]
+  year: 2026
+  doi: "10.0000/0000"        # [UPDATE on acceptance]
