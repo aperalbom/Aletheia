@@ -1,4 +1,4 @@
-"""
+r"""
 core/loaders/mzmine.py
 
 Loader for MZmine 3 quant CSV exports (the GNPS-style _iimn_quant.csv or

@@ -33,7 +33,7 @@ together with a fully auditable per-feature decision log.
 - [Quick start — CLI](#quick-start--cli)
 - [Sample-Mapping editor](#sample-mapping-editor)
 - [Outputs](#outputs)
-- [Benchmark against notame](#benchmark-against-notame)
+- [Computational benchmark](#computational-benchmark)
 - [Testing](#testing)
 - [Project layout](#project-layout)
 - [Documentation](#documentation)
@@ -57,7 +57,7 @@ together with a fully auditable per-feature decision log.
   - Level 1 (global failure) — total sum and median intensity below a
     user-defined fraction of the within-sample median.
   - Level 2 (per-feature outliers) — Z-score on valid replicates.
-- **%CV** across valid replicates and **ICC[2,1]** repeatability filters.
+- **%CV** across valid replicates and **ICC(1,1)** repeatability filters.
 - **Alternative-analysis mode** that re-executes the full pipeline excluding
   flagged replicates, propagating the effective sample size *without* missing-
   replicate imputation — in line with mQACC and MSI recommendations.
@@ -90,33 +90,31 @@ pip install -e .                # editable install
 ### Requirements
 
 - Python ≥ 3.10
-- See `requirements.txt` for pinned versions of Dash, pandas, NumPy,
-  Plotly, openpyxl and python-docx.
-
-### Optional: Docker (benchmarking environment)
-
-A reproducible benchmark image containing notame v0.3.2 and pmp
-(Bioconductor) is provided under `notame_benchmark/`. Build it with:
-
-```bash
-cd notame_benchmark
-make build       # ≈ 10 min on first run
-make bench DATA=/data/your_export.csv
-```
+- Dash, Plotly, Flask, pandas, NumPy and SciPy (see `requirements.txt`).
+- Optional, only for the PDF run report of the web UI:
+  `pip install -e .[full]` (ReportLab, svglib and Kaleido; Kaleido needs a
+  local Chrome/Chromium installation). The analysis, the CLI and all CSV
+  exports work without them.
 
 ## Quick start — Dash UI
 
 ```bash
-cd sol_analyzer_dash
-python app.py
+python sol_analyzer_dash/app.py
 # Open http://localhost:8050 in a browser
 ```
 
-Navigate to **Aletheia** in the sidebar, upload a feature table from any of
-the supported pipelines, optionally refine the auto-detected sample roles in
-the Sample-Mapping editor, set the R² / %CV thresholds, and press *Run*. The
-linearity, replicate-diagnostic and CV/ICC panels appear together with the
-download links for the curated CSV tables.
+Upload a feature table from MetaboScape, MZmine 3, XCMS or MS-DIAL (the generic
+CSV loader is available through the Python API),
+optionally refine the auto-detected sample roles in the Sample-Mapping editor,
+set the R² / %CV thresholds, and press *Run*. The linearity, replicate-
+diagnostic and CV/ICC panels appear together with the download links for the
+curated CSV tables. If no QC dilution series is detected, the run proceeds and
+the interface shows a warning instead of blocking.
+
+The interface is in English by default; the **EN | ES** switch in the sidebar
+changes the language of the web interface and of the PDF run report (the choice
+is remembered in the browser). Output files and column names are identical in
+both languages.
 
 ## Quick start — CLI
 
@@ -141,79 +139,78 @@ aletheia sniff path/to/file.csv
 
 The CLI writes the curated CSVs into `--out` plus an `aletheia_summary.json`
 file with `n_features_in`, `n_features_passed`, `pct_passed`,
-`rsd_qc_before_median`, `rsd_qc_after_median`, `runtime_s` and the parameters
-used.
+`rsd_qc_before_median`, `runtime_s`, any warnings (for example a missing QC
+dilution series) and the parameters used.
 
 ## Sample-Mapping editor
 
-When the source format encodes sample roles in companion metadata (e.g. the
-MS-DIAL workflow as used by *notame*), the auto-classifier cannot infer roles
-from column headers alone. The Sample-Mapping editor lets the user:
+The auto-classifier infers sample roles from column headers; whenever a header
+does not encode the role, the Sample-Mapping editor lets the user:
 
 - assign a role to each column (`sample` / `qc_pool` / `qc_dil` / `blank` /
   `exclude`),
-- set dilution percentage for QC dilution levels,
-- adjust replicate numbering when necessary.
+- set the dilution percentage of the QC dilution levels,
+- adjust replicate numbering and injection order when necessary.
 
-The refined mapping is persisted as a JSON sidecar (`<file>_aletheia_mapping.json`)
-so subsequent runs reproduce the same curation without manual re-entry.
+In the web UI the editor appears as a table right after the upload. The refined
+mapping can be saved as a JSON file and reloaded in later sessions, and the same
+file can be passed to the CLI (`aletheia run … --mapping mapping.json`), so a
+curated assignment is reproduced without manual re-entry.
 
 ## Outputs
 
-| File | Content |
-|---|---|
-| `linearity.csv` | Per-feature linearity decision with reason code, R², strategy used |
-| `good_coor.csv` | Features passing the linearity filter |
-| `bad_coor.csv` | Features failing the linearity filter, with reason |
-| `qcr_report.csv` | Replicate-injection diagnostic per (sample, replicate) |
-| `experiment_aggregated.csv` | Per-sample average over valid replicates (ready for MetaboAnalyst) |
-| `combined_results.csv` | Linearity + repeatability joint table |
-| `pass_all_criteria.csv` | Subset passing both filters |
-| `informe_resultados.pdf` | Audit PDF with all panels |
-| `aletheia_summary.json` | Machine-readable run summary |
+| File | Content | CLI | Web UI |
+|---|---|:-:|:-:|
+| `linearity.csv` | Per-feature linearity decision with reason code, R², strategy used | ✓ | |
+| `good_coor.csv` | Features passing the linearity filter | ✓ | ✓ |
+| `bad_coor.csv` | Features failing the linearity filter, with reason | ✓ | ✓ |
+| `qcr_report.csv` | Replicate-injection diagnostic per (sample, replicate): `Sum_int`, `Median_int`, `Fail_sum`, `Fail_median`, `Status`, `Recommendation`, `N_outliers` | ✓ | ✓ |
+| `experiment_aggregated.csv` | Per-sample average over valid replicates (ready for MetaboAnalyst) | ✓ | ✓ |
+| `aletheia_summary.json` | Machine-readable run summary | ✓ | |
+| `experiment_filtered.csv` | Original table restricted to accepted features | | ✓ |
+| `cv_per_sample.csv` | %CV per sample and feature | | ✓ |
+| `combined_results.csv` | Linearity + repeatability joint table (R², CV, ICC) | | ✓ |
+| `pass_all_criteria.csv` | Subset passing both filters | | ✓ |
+| `aletheia_report.pdf` | PDF run report (requires the `full` extra) | | ✓ |
 
-## Benchmark against notame
+## Computational benchmark
 
-A reproducible benchmark against notame v0.3.2 (archived 31 Oct 2025) and pmp
-(Bioconductor) is provided in `notame_benchmark/`. Each tool consumes the same
-feature table and emits a JSON summary; a consolidation script collates the
-metrics into a single CSV.
+`benchmark_aletheia.py` runs `aletheia run` repeatedly on a feature table and
+records wall-clock time and peak memory (median and range over the runs):
 
 ```bash
-cd notame_benchmark
-make build                                         # one-off, ≈ 10 min
-make bench DATA=/data/your_dataset.csv             # runs Aletheia + notame + pmp
-cat outputs/your_dataset/benchmark_table.csv
+pip install psutil
+python benchmark_aletheia.py --csv path/to/feature_table.csv
 ```
-
-The Docker image pins R 4.2.3, Bioconductor 3.16 and notame v0.3.2 (last
-release tag before the upstream repository was archived), so the comparison
-is byte-reproducible across hosts.
 
 ## Testing
 
 ```bash
-cd sol_analyzer_dash
-pytest tests/                # 49 tests covering all five loaders, the
-                              # legacy-dict round-trip, sample mapping,
-                              # generic CSV, and the CLI.
+pip install -e .[dev]
+pytest                        # 62 tests covering the loaders, the legacy-dict
+                              # round-trip, sample mapping, the mapping editor
+                              # of the web UI, the EN/ES interface texts, generic CSV and the CLI.
 ```
 
 ## Project layout
 
 ```
-Aletheia_Dash/
+Aletheia/
 ├── README.md
 ├── LICENSE
 ├── CITATION.cff
-├── notame_benchmark/                ← reproducible Docker image
-│   ├── Dockerfile, docker-compose.yml, Makefile, scripts/
+├── pyproject.toml
+├── requirements.txt
+├── benchmark_aletheia.py
 └── sol_analyzer_dash/
-    ├── app.py                       ← Dash entry point
+    ├── app.py                       ← Dash entry point (web UI)
     ├── cli.py                       ← `aletheia run|sniff|version`
     ├── core/
     │   ├── analysis.py              ← linearity / QCR / CV / ICC
     │   ├── schema.py                ← ParsedDataset, SampleRecord
+    │   ├── cache.py                 ← server-side result cache
+    │   ├── i18n.py, i18n_es_*.py    ← EN/ES interface texts
+    │   ├── pdf_report.py            ← PDF run report
     │   └── loaders/                 ← multi-format ingestion layer
     │       ├── metaboscape.py
     │       ├── mzmine.py
@@ -223,14 +220,16 @@ Aletheia_Dash/
     │       └── mapping_io.py        ← sidecar JSON persistence
     ├── components/
     │   └── sample_mapping.py        ← Dash editor for role refinement
-    ├── pages/                       ← Dash pages (UI)
+    ├── pages/
+    │   └── sol_analyzer.py          ← the Aletheia page
+    ├── assets/                      ← stylesheet and logo
     └── tests/                       ← pytest suite
 ```
 
 ## Documentation
 
-Full documentation, vignettes and screenshots will be published at
-`https://aperalbom.github.io/Aletheia` (link pending the first release).
+A step-by-step tutorial with a synthetic plasma example dataset is provided as
+Online Resource 5 of the accompanying paper.
 
 ## Citation
 

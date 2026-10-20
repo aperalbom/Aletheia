@@ -2,7 +2,7 @@
 # Aletheia — packaging metadata (PEP 621)
 # =====================================================================
 # Build:  pip install -e .              # editable install + console script
-#         pip install .[full]           # adds PDF/DOCX/biomarker extras
+#         pip install .[full]           # adds PDF report export
 #         pip install .[dev]            # adds pytest
 # =====================================================================
 
@@ -12,7 +12,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aletheia"
-version = "1.0.0"
+version = "1.0.1"
 description = "Quality-control pipeline for untargeted LC–MS metabolomics and lipidomics — per-feature linearity, two-tier replicate diagnostic, multi-format input."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -69,13 +69,12 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-# `pip install aletheia[full]` — adds report-generation back-ends.
+# `pip install aletheia[full]` — adds the PDF run-report export of the web UI
+# (the CLI and the analysis itself do not need it).
 full = [
     "reportlab>=4.0",          # PDF rendering of Aletheia run reports
-    "svglib>=1.5",             # SVG → PDF support for Plotly chart export
-    "python-docx>=1.0",        # DOCX statistical reports
-    "openpyxl>=3.1",           # Excel I/O for templates and result tables
-    "scikit-learn>=1.3",       # Biomarker AUC (sklearn fallback path)
+    "svglib>=1.5",             # SVG → PDF conversion of the Plotly figures
+    "kaleido>=1.0",            # Plotly static-image export (needs Chrome/Chromium)
 ]
 # Dev tooling — tests, linting, type-checking.
 dev = [
@@ -102,7 +101,7 @@ include-package-data = true
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["sol_analyzer_dash*"]
-exclude = ["sol_analyzer_dash.tests*", "notame_benchmark*"]
+exclude = ["sol_analyzer_dash.tests*"]
 
 # ---------------------------------------------------------------------
 # pytest — test discovery configuration

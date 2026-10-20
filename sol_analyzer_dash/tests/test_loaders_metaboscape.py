@@ -142,6 +142,63 @@ def test_metaboscape_loader_extra_metadata(fixture_csv):
     assert "QC100" in ds.extra["qc_dil_names"]
 
 
+def test_qcsb_leading_prefix_classified_as_qc(tmp_path):
+    """Regression: SOL2026060-style batches label their controls as a
+    *leading* ``QCSB`` / ``QCSB<NN>`` token (QC Sangre/Batch) instead of
+    the ``QC`` / ``QC<NN>`` trailing convention used elsewhere. Before this
+    fix, ``_classify`` only recognised QC as a trailing suffix, so every
+    QCSB* column fell through to ``sample`` — e.g. 12 real samples (13-24)
+    with 3 replicates each plus 6 QCSB columns were reported as 18
+    "samples" with 2 replicates instead of the correct 12 x 3.
+    """
+    import numpy as np
+    from core.loaders.metaboscape import MetaboScapeLoader
+
+    rng = np.random.default_rng(60)
+    n_features = 10
+    # 12 real samples (13..24) x 3 replicates + QCSB (x6) + QCSB20..QCSB100
+    # (x1 each), mirroring the SOL2026060 study column-naming convention.
+    # Real SOL exports append one or more purely-numeric plate/position/run
+    # tokens before the "[POS]<run>.d" tail (e.g.
+    # "SOL2026060-22_28_1_179_[POS]65.d_[NEG]07.d") — a literal, non-numeric
+    # token (like "run") would NOT be stripped by ``_extract_sample`` and
+    # would defeat the point of this fixture, so every token here is numeric.
+    sample_cols = []
+    for sample_n in range(13, 25):
+        for rep in range(1, 4):
+            sample_cols.append(f"SOL2026060-{sample_n}_28_1_[POS]{rep}.d")
+    for i in range(6):
+        sample_cols.append(f"SOL2026060-QCSB_18_1_[POS]{900+i}.d")
+    for level in (20, 40, 60, 80, 100):
+        sample_cols.append(f"SOL2026060-QCSB{level}_18_1_[POS]{950+level}.d")
+
+    raw = {
+        "Bucket label": [f"F{i:03d}" for i in range(n_features)],
+        "RT":           rng.uniform(0.5, 12.0, n_features),
+        "m/z":          rng.uniform(80, 1200, n_features),
+        "Name":         ["" for _ in range(n_features)],
+        "Formula":      ["" for _ in range(n_features)],
+    }
+    import pandas as pd
+    df = pd.DataFrame(raw)
+    for c in sample_cols:
+        df[c] = rng.uniform(1e3, 1e6, n_features).round(2)
+    csv_path = tmp_path / "fixture_qcsb.csv"
+    df.to_csv(csv_path, index=False)
+
+    ds = MetaboScapeLoader().load(str(csv_path))
+    legacy = ds.to_legacy_dict()
+
+    assert legacy["n_samples"] == 12
+    assert legacy["reps_per_sample"] == 3
+    assert legacy["real_samples"] == list(range(13, 25))
+    # QCSB (pool) and QCSB20..QCSB100 (dilution series) must never appear
+    # among the biological samples.
+    assert set(legacy["samp_df"]["sample"].unique()) == {str(n) for n in range(13, 25)}
+    assert len(legacy["qc_norm_df"]) == 6          # bare QCSB pool
+    assert len(legacy["qc_dil_df"]) == 5            # QCSB20..QCSB100
+
+
 def test_run_m1_consumes_legacy_dict(fixture_csv):
     """End-to-end: feed the new loader's legacy dict into run_m1."""
     from core.analysis import run_m1

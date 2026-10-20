@@ -11,14 +11,19 @@ Recognises the canonical Bruker convention:
                          dilution marker, or any of those prefixed with
                          a project tag such as "Plasma").
 
-Role classification is done by *trailing-pattern* heuristic so that
-projects using project-specific prefixes (e.g. `PlasmaQC20` instead of
-plain `QC20`) are recognised automatically:
+Role classification is done by a *trailing-* and *leading-pattern*
+heuristic so that projects using project-specific decorations around the
+``QC`` token — either a trailing tag (e.g. `PlasmaQC20` instead of plain
+`QC20`) or a leading tag (e.g. `QCSB20`, the "QC Sangre/Batch" convention
+used by some SOL studies) — are recognised automatically:
 
-    * sample_id ends in ``QC<NN>`` with NN ∈ {10, 20, 25, 30, 40, 50, 60,
-      70, 75, 80, 90, 100}                               → ``qc_dil`` (level=NN)
-    * sample_id is exactly ``QC`` or ends in a non-numeric ``QC``
-      (e.g. ``PlasmaQC``, ``MtxQC``)                      → ``qc_pool``
+    * sample_id ends in ``QC<NN>`` (trailing, e.g. ``PlasmaQC20``) or
+      starts with ``QC<letters><NN>`` (leading, e.g. ``QCSB20``), with
+      NN ∈ {10, 20, 25, 30, 40, 50, 60, 70, 75, 80, 90, 100}
+                                                            → ``qc_dil`` (level=NN)
+    * sample_id is exactly ``QC``, ends in a non-numeric ``QC``
+      (e.g. ``PlasmaQC``, ``MtxQC``), or starts with ``QC`` followed only
+      by letters (e.g. ``QCSB``, ``QCPool``)                → ``qc_pool``
     * exact match against the caller-supplied ``qc_dil_names`` or
       ``qc_pool_name`` (legacy behaviour)                  → as configured
     * otherwise                                            → ``sample``
@@ -42,9 +47,15 @@ META_COLS_DEFAULT     = {"Bucket label", "RT", "m/z", "Name", "Formula"}
 QC_DIL_NAMES_DEFAULT  = {"QC20", "QC40", "QC60", "QC80", "QC100"}
 QC_NRM_NAME_DEFAULT   = "QC"
 
-# Trailing-pattern recognisers (case-insensitive)
+# Trailing-pattern recognisers (case-insensitive) — e.g. "PlasmaQC20".
 _QC_DIL_TAIL_RE  = re.compile(r"QC(\d{1,3})$", re.IGNORECASE)
 _QC_POOL_TAIL_RE = re.compile(r"(?:^|[^A-Za-z0-9])QC$", re.IGNORECASE)
+
+# Leading-pattern recognisers (case-insensitive) — e.g. "QCSB20" / "QCSB"
+# (the "QC Sangre/Batch" convention some SOL studies use, where the QC
+# token comes *first* instead of being appended to the sample prefix).
+_QC_DIL_HEAD_RE  = re.compile(r"^QC[A-Za-z]*(\d{1,3})$", re.IGNORECASE)
+_QC_POOL_HEAD_RE = re.compile(r"^QC[A-Za-z]*$", re.IGNORECASE)
 
 # Accepted dilution percentages (anything else is treated as a "sample"
 # even if it ends in QC<digits>, to avoid false positives like "myQC1024").
@@ -108,9 +119,10 @@ def _classify(sid: str,
 
     Precedence:
       1. Exact match against caller-supplied vocabularies.
-      2. Trailing-pattern: ``...QC<NN>`` with NN in the accepted set →
-         qc_dil level NN.
-      3. Trailing-pattern: ``...QC`` (no digits) → qc_pool.
+      2. Trailing- or leading-pattern: ``...QC<NN>`` / ``QC<letters><NN>``
+         with NN in the accepted set → qc_dil level NN.
+      3. Trailing- or leading-pattern: ``...QC`` / ``QC<letters>``
+         (no accepted digits) → qc_pool.
       4. Otherwise → sample.
     """
     # 1. Exact match — legacy behaviour
@@ -119,8 +131,8 @@ def _classify(sid: str,
     if sid == qc_pool_name:
         return ROLE_QC_POOL, None
 
-    # 2. Trailing pattern: <prefix>QC<NN>
-    m = _QC_DIL_TAIL_RE.search(sid)
+    # 2. Trailing/leading pattern: <prefix>QC<NN>  or  QC<letters><NN>
+    m = _QC_DIL_TAIL_RE.search(sid) or _QC_DIL_HEAD_RE.match(sid)
     if m:
         try:
             level = int(m.group(1))
@@ -129,8 +141,10 @@ def _classify(sid: str,
         if level is not None and level in _QC_DIL_LEVELS:
             return ROLE_QC_DIL, level
 
-    # 3. Trailing pattern: <prefix>QC (no digits)
-    if sid.lower().endswith("qc") and not _QC_DIL_TAIL_RE.search(sid):
+    # 3. Trailing/leading pattern: <prefix>QC  or  QC<letters>  (no digits,
+    #    or digits that did not resolve to an accepted dilution level above)
+    if ((sid.lower().endswith("qc") and not _QC_DIL_TAIL_RE.search(sid))
+            or (_QC_POOL_HEAD_RE.match(sid) is not None)):
         return ROLE_QC_POOL, None
 
     # 4. Fallback

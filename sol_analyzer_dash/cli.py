@@ -64,7 +64,7 @@ try:
     from sol_analyzer_dash import __version__ as VERSION
 except Exception:
     # Fallback for in-tree execution without an installed package.
-    VERSION = "1.0.0"
+    VERSION = "1.0.1"
 
 
 # ---------------------------------------------------------------------------
@@ -153,6 +153,19 @@ def cmd_run(args: argparse.Namespace) -> int:
     n_features_in = parsed["n_metabolites"]
     n_samples_in  = parsed["n_samples"]
 
+    # Aletheia filters features by the linearity of the QC dilution series.
+    # Without at least two dilution levels no feature can be assessed.
+    run_warnings: list[str] = []
+    n_dil_levels = (int(parsed["qc_dil_df"]["dil"].nunique())
+                    if len(parsed.get("qc_dil_df", [])) else 0)
+    if n_dil_levels < 2:
+        msg = (f"no QC dilution series found ({n_dil_levels} dilution level(s)); "
+               f"at least 2 levels with role 'qc_dil' are required, so every "
+               f"feature will be reported as 'no_data' and none will be "
+               f"retained. Check the sample mapping.")
+        run_warnings.append(msg)
+        print(f"warning: {msg}", file=sys.stderr)
+
     rsd_before = _rsd_qc(parsed)
 
     # ---- 2. linearity --------------------------------------------------
@@ -211,6 +224,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         "n_samples_in":        int(n_samples_in),
         "n_qc_pool":           int(len(parsed.get("qc_norm_df", []))),
         "n_qc_dil_levels":     int(parsed["qc_dil_df"]["dil"].nunique()) if len(parsed.get("qc_dil_df", [])) else 0,
+        "warnings":            run_warnings,
         "runtime_s":           runtime,
         "aletheia_version":    VERSION,
         "python_version":      platform.python_version(),

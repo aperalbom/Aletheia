@@ -1,10 +1,10 @@
 """
-app.py — Punto de entrada de la plataforma IMSMI
+app.py — Aletheia web interface (entry point)
 Arranca con:
-    python sol_analyzer_dash/app.py              (desde la raíz del repo)
-    python -m sol_analyzer_dash.app              (también desde la raíz)
-    cd sol_analyzer_dash && python app.py        (modo legacy)
-Abre en:      http://localhost:8050
+    python sol_analyzer_dash/app.py              (from the repository root)
+    python -m sol_analyzer_dash.app              (also from the repository root)
+    cd sol_analyzer_dash && python app.py        (legacy mode)
+Opens at:     http://localhost:8050
 """
 
 # ---------------------------------------------------------------------------
@@ -18,8 +18,14 @@ Abre en:      http://localhost:8050
 import sys
 from pathlib import Path
 _HERE = Path(__file__).resolve().parent
+# Add the package directory so bare imports (``from core.X import …``) resolve.
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
+# Also add the parent so fully-qualified imports (``from sol_analyzer_dash.core …``)
+# work regardless of the working directory the user launches from.
+_PARENT = _HERE.parent
+if str(_PARENT) not in sys.path:
+    sys.path.insert(0, str(_PARENT))
 
 import dash
 from dash import Dash, html, dcc, Input, Output, callback
@@ -37,13 +43,15 @@ app = Dash(
     suppress_callback_exceptions=True,
     meta_tags=[{"name":"viewport","content":"width=device-width, initial-scale=1"}],
 )
-app.title = "Aletheia · IMSMI"
+app.title = "Aletheia"
 
 
 from core.cache import load as cload
+from core.i18n import t, get_lang, COOKIE as LANG_COOKIE
+from sol_analyzer_dash import __version__
 
 # =============================================================================
-# ENDPOINTS DE DESCARGA — sin automatismo, el usuario elige cuándo
+# DOWNLOAD ENDPOINTS — nothing is downloaded automatically, the user chooses when
 # =============================================================================
 
 def _combined_df(d):
@@ -103,7 +111,7 @@ def _is_alt_entry(d: dict) -> bool:
 def download_file(rkey, dtype):
     d = cload(rkey)
     if not d or dtype not in DL_MAP:
-        return "No encontrado", 404
+        return "Not found", 404
     df, fname = DL_MAP[dtype](d)
     if _is_alt_entry(d):
         fname = _alt_suffix_filename(fname)
@@ -122,9 +130,9 @@ def download_pdf(rkey):
     from flask import request
     d = cload(rkey)
     if not d:
-        return "No encontrado", 404
+        return "Not found", 404
     is_alt = _is_alt_entry(d) or (request.args.get("alt") == "1")
-    pdf_name = "informe_sol_analyzer_ALT.pdf" if is_alt else "informe_sol_analyzer.pdf"
+    pdf_name = "aletheia_report_ALT.pdf" if is_alt else "aletheia_report.pdf"
     try:
         import reportlab
         from core.pdf_report import build_pdf
@@ -135,12 +143,12 @@ def download_pdf(rkey):
             as_attachment=True,
             download_name=pdf_name,
         )
-    except (ImportError, ModuleNotFoundError):
+    except Exception:
+        # reportlab/svglib missing, or Kaleido cannot find Chrome/Chromium:
+        # fall through to the printable HTML report below.
         pass
-    except Exception as e:
-        return f"Error generando PDF: {e}", 500
 
-    # Fallback: HTML con gráficas Plotly interactivas
+    # Fallback: printable HTML with interactive Plotly charts (no extra deps)
     try:
         from core.pdf_report import build_print_html
         html_str = build_print_html(d)
@@ -149,150 +157,29 @@ def download_pdf(rkey):
             "Content-Security-Policy": "script-src 'self' 'unsafe-inline' 'unsafe-eval';",
         }
     except Exception as e:
-        return f"Error generando informe: {e}", 500
+        return f"Error generating report: {e}", 500
 
 
-# =============================================================================
-# Stats module — DOCX/PDF report endpoints
-# =============================================================================
-
-def _stats_data_for_report(key: str | None = None):
-    """Pull a specific stats cache entry (by key from the UI) and convert it
-    into the flat dict expected by core.stats_report.build_*. Falls back to
-    the most recently-saved entry with pp_done=True if no key is given."""
-    from core.cache import _CACHE
-    from flask import request
-
-    if key is None:
-        try:
-            key = request.args.get("key")
-        except Exception:
-            key = None
-
-    d = None
-    if key and key in _CACHE and isinstance(_CACHE[key], dict):
-        d = _CACHE[key]
-        if not d.get("pp_done"):
-            d = None
-
-    if d is None:
-        candidates = [(k, v) for k, v in _CACHE.items()
-                        if isinstance(v, dict) and v.get("pp_done")
-                           and v.get("form") is not None]
-        if not candidates:
-            return None
-        _, d = candidates[-1]
-
-    out = {
-        "metadata":   d["form"]["metadata"],
-        "n_samples":  len(d.get("rename_map", {})) or d["form"]["n_samples"],
-        "groups":     {"factor": "Condition", "values": d["form"]["conditions"]},
-        "factorial":  d["form"]["factorial"],
-        "pp_summary": d.get("pp_summary", "—"),
-        "date":       __import__("datetime").datetime.now().strftime("%Y-%m-%d %H:%M"),
-    }
-
-    if d.get("uni_res"):
-        u = d["uni_res"]
-        out["univariate"] = {"comparisons": [{
-            "idx":       1,
-            "a":         u["a"], "b": u["b"],
-            "test":      u["test"],
-            "n_sig":     u["n_sig"],
-            "table_top": u["table"].head(20),
-        }]}
-    if d.get("pca_res"):
-        out["pca"] = {"explained": d["pca_res"]["explained"]}
-    if d.get("pls_res"):
-        p = d["pls_res"]
-        out["plsda"] = {
-            "accuracy_cv":   p["accuracy_cv"],
-            "p_value":       p.get("permutation", {}).get("p_value") if p.get("permutation") else None,
-            "n_permutations":p.get("n_permutations", 0),
-            "vip_top":       (p["vip"].head(20)
-                                  .rename_axis("feature")
-                                  .reset_index()
-                                  .rename(columns={0: "VIP"})),
-        }
-    if d.get("bm_res"):
-        b = d["bm_res"]
-        out["biomarkers"] = [{"comparison": (b["a"], b["b"]),
-                                "top": b["top"]}]
-    return out
-
-
-@app.server.route("/dl_stats/docx")
-def download_stats_docx():
-    import traceback
-    data = _stats_data_for_report()
-    if not data:
-        return ("<h2>No hay análisis preparados todavía.</h2>"
-                "<p>Asegúrate de haber subido plantilla + CSV y haber aplicado "
-                "el preprocesado antes de intentar generar el informe.</p>",
-                404)
-    try:
-        from core.stats_report import build_docx
-        buf = build_docx(data)
-        return send_file(io.BytesIO(buf),
-                          mimetype="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-                          as_attachment=True,
-                          download_name="stats_report.docx")
-    except Exception as e:
-        tb = traceback.format_exc()
-        return (f"<h2>Error generando DOCX</h2><pre>{e}\n\n{tb}</pre>", 500)
-
-
-@app.server.route("/dl_stats/pdf")
-def download_stats_pdf():
-    import traceback
-    data = _stats_data_for_report()
-    if not data:
-        return ("<h2>No hay análisis preparados todavía.</h2>"
-                "<p>Asegúrate de haber subido plantilla + CSV y haber aplicado "
-                "el preprocesado antes de intentar generar el informe.</p>",
-                404)
-    try:
-        from core.stats_report import build_pdf
-        buf = build_pdf(data)
-        return send_file(io.BytesIO(buf),
-                          mimetype="application/pdf",
-                          as_attachment=True,
-                          download_name="stats_report.pdf")
-    except RuntimeError as e:
-        # LibreOffice missing → friendly page (no traceback noise)
-        msg = str(e)
-        return (f"""<!doctype html><html lang="es"><head>
-<meta charset="utf-8"><title>PDF no disponible</title>
-<style>body{{font-family:Inter,system-ui,sans-serif;max-width:680px;
-margin:60px auto;padding:0 20px;color:#2C2C2A}}
-h2{{color:#C0756A}} a{{color:#4A9B8F;font-weight:600}}
-.box{{background:#F7F6F2;border:1px solid #E4E2DC;border-radius:8px;
-padding:18px;margin:18px 0;font-size:14px;line-height:1.55}}</style>
-</head><body>
-<h2>📄 PDF no disponible</h2>
-<div class="box">{msg}</div>
-<p>Mientras tanto puedes <a href="/dl_stats/docx?{__import__('flask').request.query_string.decode()}">
-descargar el DOCX</a> y abrirlo en Word — o conviértelo a PDF desde Word
-con <em>Archivo → Guardar como → PDF</em>.</p>
-</body></html>""", 503)
-    except Exception as e:
-        tb = traceback.format_exc()
-        return (f"<h2>Error generando PDF</h2><pre>{e}\n\n{tb}</pre>", 500)
+@app.server.route("/sol-analyzer")
+def _legacy_path():
+    """Backward-compatible alias of the v1.0.0 page path."""
+    from flask import redirect
+    return redirect("/", code=302)
 
 
 @app.server.route("/plotly.js")
 def serve_plotlyjs():
-    """Sirve el JS de Plotly desde la instalación local — sin necesitar CDN."""
+    """Serve Plotly.js from the local installation — no CDN needed."""
     try:
         import plotly
         import os
-        # Buscar el archivo plotly.min.js en la instalación
+        # Look for plotly.min.js in the installation
         plotly_dir = os.path.dirname(plotly.__file__)
         candidates = [
             os.path.join(plotly_dir, "package_data", "plotly.min.js"),
             os.path.join(plotly_dir, "static", "plotly.min.js"),
         ]
-        # Buscar recursivamente si no está en las rutas habituales
+        # Search recursively if it is not in the usual locations
         for root, dirs, files in os.walk(plotly_dir):
             for fname in files:
                 if fname in ("plotly.min.js", "plotly.js"):
@@ -309,7 +196,7 @@ def serve_plotlyjs():
                     "Cache-Control": "public, max-age=86400",
                 }
 
-        # Último recurso: generar el JS desde Plotly
+        # Last resort: extract the JS from a Plotly export
         import plotly.graph_objects as go
         import plotly.io as pio
         dummy = pio.to_html(go.Figure(), full_html=False, include_plotlyjs=True)
@@ -324,40 +211,52 @@ def serve_plotlyjs():
         return f"Error: {e}", 500
 
 # =============================================================================
-# NAVEGACIÓN LATERAL
+# SIDEBAR NAVIGATION
 # =============================================================================
 
 NAV_ITEMS = [
-    {"section": "General"},
-    {"label":"Inicio",                        "href":"/",             "icon":"⌂"},
-    {"section": "Análisis"},
-    {"label":"Aletheia",                      "href":"/sol-analyzer", "icon":"◈"},
-    {"section": "Informes"},
-    {"label":"Metab. / Lipidómica",           "href":"/informe",      "icon":"📄"},
-    {"label":"Proteómica",                    "href":"/proteomics",   "icon":"🔬"},
-    {"section": "Herramientas"},
-    {"label":"Análisis estadístico",          "href":"/stats",        "icon":"📈"},
-    {"label":"Listas randomizadas",           "href":"/randomizer",   "icon":"🎲"},
-    {"section": "Control Interno"},
-    {"label":"Registro de solicitudes",       "href":"/registry",     "icon":"📋"},
+    {"section": "Aletheia"},
+    {"label": "QC dilution filtering", "href": "/", "icon": "◈"},   # translated in build_sidebar
 ]
+
+
+def _language_selector():
+    """EN | ES switch. The choice is stored in a cookie (read server-side by
+    core.i18n.t) and the page is reloaded so every component is re-rendered."""
+    cur = get_lang()
+    def btn(code, label):
+        on = cur == code
+        return html.Button(label, id=f"lang-{code}", n_clicks=0, title=t("Interface language"),
+                           style={"background": "rgba(255,255,255,0.14)" if on else "transparent",
+                                  "color": "#FFFFFF" if on else "rgba(255,255,255,0.55)",
+                                  "border": "1px solid rgba(255,255,255,0.25)",
+                                  "borderRadius": "4px", "padding": "3px 10px",
+                                  "fontFamily": "monospace", "fontSize": "11px",
+                                  "cursor": "pointer", "marginRight": "6px"})
+    return html.Div(style={"padding": "1rem 1.2rem"}, children=[
+        html.Div(t("Language"), style={"fontSize": "9px", "letterSpacing": ".08em",
+                                       "textTransform": "uppercase", "marginBottom": "6px",
+                                       "color": "rgba(255,255,255,0.35)",
+                                       "fontFamily": "monospace"}),
+        btn("en", "EN"), btn("es", "ES"),
+    ])
 
 
 def build_sidebar(current_path):
     items = []
     for item in NAV_ITEMS:
         if "section" in item:
-            items.append(html.Div(item["section"], className="sidebar-section"))
+            items.append(html.Div(t(item["section"]), className="sidebar-section"))
         elif item.get("disabled"):
             items.append(html.Div(
-                [html.Span(item["icon"], className="nav-icon"), item["label"]],
+                [html.Span(item["icon"], className="nav-icon"), t(item["label"])],
                 className="nav-link",
                 style={"opacity":".35","cursor":"default"},
             ))
         else:
             active = current_path == item["href"]
             items.append(dcc.Link(
-                [html.Span(item["icon"], className="nav-icon"), item["label"]],
+                [html.Span(item["icon"], className="nav-icon"), t(item["label"])],
                 href=item["href"],
                 className="nav-link active" if active else "nav-link",
             ))
@@ -372,10 +271,11 @@ def build_sidebar(current_path):
             html.Div("ECAI · IMIBIC · Córdoba", className="sidebar-logo-sub"),
         ]),
         *items,
+        _language_selector(),
         html.Div(style={"padding":"1rem 1.2rem","position":"absolute","bottom":0,
                         "left":0,"right":0,"borderTop":"1px solid rgba(255,255,255,0.08)"},
                  children=[
-            html.Div("v1.0 · 2026",
+            html.Div(f"v{__version__} · 2026",
                      style={"fontSize":"9px","color":"rgba(255,255,255,0.2)",
                             "fontFamily":"monospace","letterSpacing":".05em"}),
         ]),
@@ -384,11 +284,12 @@ def build_sidebar(current_path):
 
 
 # =============================================================================
-# LAYOUT PRINCIPAL
+# MAIN LAYOUT
 # =============================================================================
 
 app.layout = html.Div([
     dcc.Location(id="url"),
+    dcc.Store(id="lang-sink"),
     html.Div(id="sidebar-container"),
     html.Div(
         dash.page_container,
@@ -405,29 +306,71 @@ def update_sidebar(pathname):
     return build_sidebar(pathname or "/")
 
 
+app.clientside_callback(
+    """
+    function(n_en, n_es) {
+        var id = (window.dash_clientside.callback_context.triggered || [{}])[0].prop_id || "";
+        var lang = null;
+        if (id.indexOf("lang-es") === 0 && n_es > 0) { lang = "es"; }
+        if (id.indexOf("lang-en") === 0 && n_en > 0) { lang = "en"; }
+        // Ignore the call made when the buttons are (re)rendered with n_clicks = 0.
+        if (!lang) { return window.dash_clientside.no_update; }
+        document.cookie = "%s=" + lang + "; path=/; max-age=31536000; SameSite=Lax";
+        window.location.reload();
+        return lang;
+    }
+    """ % LANG_COOKIE,
+    Output("lang-sink", "data"),
+    Input("lang-en", "n_clicks"),
+    Input("lang-es", "n_clicks"),
+    prevent_initial_call=True,
+)
+
+
 # =============================================================================
-# ARRANQUE
+# STARTUP
 # =============================================================================
 
 if __name__ == "__main__":
-    import webbrowser, threading, time
+    import webbrowser, threading, time, subprocess, shutil
 
     port = 8050
     url  = f"http://localhost:{port}"
+
+    def _find_chrome():
+        """Locate a Chrome executable on Windows without relying on the OS
+        default-browser association (which may be set to Edge)."""
+        program_dirs = [
+            os.environ.get("ProgramFiles"),
+            os.environ.get("ProgramFiles(x86)"),
+            os.environ.get("LocalAppData"),
+        ]
+        for base in program_dirs:
+            if not base:
+                continue
+            candidate = os.path.join(base, "Google", "Chrome", "Application", "chrome.exe")
+            if os.path.isfile(candidate):
+                return candidate
+        return shutil.which("chrome") or shutil.which("google-chrome") or shutil.which("chrome.exe")
 
     def open_browser():
         time.sleep(2.0)
         try:
             if sys.platform == "win32":
-                os.startfile(url)
+                chrome_exe = _find_chrome()
+                if chrome_exe:
+                    subprocess.Popen([chrome_exe, url])
+                else:
+                    # Chrome not found: fall back to whatever the OS has set as default.
+                    os.startfile(url)
             else:
                 webbrowser.open(url)
         except Exception:
             pass
 
     print(f"\n{'='*50}")
-    print(f"  Aletheia · IMSMI arrancando...")
-    print(f"  Abre en tu navegador: {url}")
+    print(f"  Aletheia v{__version__} starting...")
+    print(f"  Open in your browser: {url}")
     print(f"{'='*50}\n", flush=True)
 
     threading.Thread(target=open_browser, daemon=True).start()

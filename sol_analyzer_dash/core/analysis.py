@@ -1,7 +1,7 @@
 """
 core/analysis.py
-Toda la lógica de análisis: parseo, linealidad, QC réplicas, CV/ICC.
-Independiente de la UI — reutilizable desde scripts de línea de comandos.
+All analysis logic: parsing, linearity, QC replicates, CV/ICC.
+Independent of the UI — reusable from command-line scripts.
 """
 
 import re
@@ -16,7 +16,7 @@ QC_DIL_NAMES = {"QC20", "QC40", "QC60", "QC80", "QC100"}
 QC_NRM_NAME  = "QC"
 
 # =============================================================================
-# PARSEO
+# PARSING
 # =============================================================================
 
 def extract_sample(col: str) -> str:
@@ -33,7 +33,7 @@ def extract_run(col: str) -> int:
     return int(nums[-1]) if nums else 0
 
 def parse_file(filepath_or_buffer) -> dict:
-    """Lee el CSV y devuelve un dict con raw, col_df, qc_dil_df, qc_norm_df, samp_df,
+    """Read the CSV and return a dict with raw, col_df, qc_dil_df, qc_norm_df, samp_df,
     real_samples, reps_per_level, n_metabolites."""
     raw = pd.read_csv(filepath_or_buffer, encoding="latin1",
                       on_bad_lines="skip", engine="python")
@@ -69,7 +69,7 @@ def parse_file(filepath_or_buffer) -> dict:
                 n_samples=n_samp, reps_per_sample=n_rep)
 
 # =============================================================================
-# MÓDULO 1 — LINEALIDAD
+# MODULE 1 — LINEARITY
 # =============================================================================
 
 def _get_val(series):
@@ -168,11 +168,11 @@ def run_m1(parsed: dict, r2_threshold=0.6, allow2pt=True, use_drop=True, ion_sup
     reps_per_lvl = parsed["reps_per_level"]
     N            = len(raw)
 
-    # Construir matrices por estrategia de una vez
+    # Build the matrices for every strategy at once
     dil_levels = sorted(qc_dil_df["dil"].unique())
     n_dil      = len(dil_levels)
 
-    # strategies a probar
+    # strategies to try
     if reps_per_lvl == 1:
         strategies = ["mean"]
     elif reps_per_lvl == 2:
@@ -182,7 +182,7 @@ def run_m1(parsed: dict, r2_threshold=0.6, allow2pt=True, use_drop=True, ion_sup
 
     drops = [False, True] if use_drop else [False]
 
-    # Preconstruir matrices (N, n_dil) para cada estrategia
+    # Pre-build (N, n_dil) matrices for each strategy
     strat_matrices = {}
     for strat in strategies:
         mat = np.full((N, n_dil), np.nan)
@@ -203,13 +203,13 @@ def run_m1(parsed: dict, r2_threshold=0.6, allow2pt=True, use_drop=True, ion_sup
     xs = np.array(dil_levels, dtype=float)
 
     def lin_reg_batch(mat):
-        """Regresión lineal vectorizada para N metabolitos a la vez.
-        mat: (N, n_dil), puede tener NaN.
-        Devuelve slopes (N,), r2s (N,)."""
+        """Vectorised linear regression for N features at once.
+        mat: (N, n_dil), may contain NaN.
+        Returns slopes (N,), r2s (N,)."""
         valid = ~np.isnan(mat)
         n_v   = valid.sum(axis=1).astype(float)
 
-        # Sustitur NaN por 0 para sumas (con máscara)
+        # Replace NaN by 0 for the sums (with mask)
         mat0 = np.where(valid, mat, 0.0)
         xs_exp = np.tile(xs, (N,1))
         xs_m   = np.where(valid, xs_exp, 0.0)
@@ -224,7 +224,7 @@ def run_m1(parsed: dict, r2_threshold=0.6, allow2pt=True, use_drop=True, ion_sup
         b    = np.where(safe, (n_v*sxy - sx*sy) / np.where(safe,den,1), 0.0)
         a    = np.where(n_v>0, (sy - b*sx) / np.where(n_v>0,n_v,1), np.nan)
 
-        # R² solo con ≥3 puntos válidos
+        # R² only with ≥3 valid points
         r2 = np.full(N, np.nan)
         mask3 = n_v >= 3
         if mask3.any():
@@ -236,13 +236,13 @@ def run_m1(parsed: dict, r2_threshold=0.6, allow2pt=True, use_drop=True, ion_sup
 
         return b, r2, n_v.astype(int)
 
-    # Para cada combinación strat×drop: calcular slope, r2, n_valid
-    # Guardar la mejor (pendiente positiva, mayor R²)
+    # For each strat×drop combination: compute slope, r2, n_valid
+    # Keep the best one (positive slope, highest R²)
     best_r2_pos  = np.full(N, -np.inf)
     best_r2_neg  = np.full(N, -np.inf)
     best_slope   = np.zeros(N)
-    best_r2      = np.full(N, np.nan)   # R² de la mejor pendiente positiva
-    best_r2_neg_val = np.full(N, np.nan)  # R² de la mejor pendiente negativa
+    best_r2      = np.full(N, np.nan)   # R² of the best positive slope
+    best_r2_neg_val = np.full(N, np.nan)  # R² of the best negative slope
     best_n       = np.zeros(N, dtype=int)
     best_strat   = np.full(N, "", dtype=object)
 
@@ -256,7 +256,7 @@ def run_m1(parsed: dict, r2_threshold=0.6, allow2pt=True, use_drop=True, ion_sup
             if n_dil_use < 2:
                 continue
 
-            # Recalcular con xs_use
+            # Recompute with xs_use
             valid = ~np.isnan(mat)
             n_v   = valid.sum(axis=1).astype(float)
             mat0  = np.where(valid, mat, 0.0)
@@ -298,36 +298,36 @@ def run_m1(parsed: dict, r2_threshold=0.6, allow2pt=True, use_drop=True, ion_sup
             best_r2_neg_val = np.where(upd_neg, np.where(~np.isnan(r2), r2, np.nan),
                                        best_r2_neg_val)
 
-    # Evaluar resultado
+    # Evaluate the result
     has_pos = best_r2_pos > -np.inf
     slope   = best_slope
     r2v     = best_r2
     nv      = best_n
 
-    # Determinar ok y reason vectorizado
+    # Determine ok and reason (vectorised)
     ok     = np.zeros(N, dtype=bool)
     reason = np.full(N, "no_data", dtype=object)
 
-    # Sin datos válidos
+    # No valid data
     no_data_mask = ~has_pos & (best_r2_neg == -np.inf)
     reason = np.where(no_data_mask, "no_data", reason)
 
-    # Pendiente negativa
+    # Negative slope
     neg_mask = ~has_pos & ~no_data_mask
     if ion_sup:
-        # Usar el R² real de la mejor pendiente negativa
+        # Use the actual R² of the best negative slope
         r2_neg = best_r2_neg_val
         ion_mask = neg_mask & ~np.isnan(r2_neg) & (r2_neg >= r2_threshold)
         ok     = np.where(ion_mask, True, ok)
         reason = np.where(ion_mask, "non_monotonic_response", reason)
-        # Para non-monotonic response, usar su R² real en el dataframe
+        # For non-monotonic response, use its actual R² in the dataframe
         r2v    = np.where(ion_mask, r2_neg, r2v)
         neg_only = neg_mask & ~ion_mask
     else:
         neg_only = neg_mask
     reason = np.where(neg_only, "negative_slope", reason)
 
-    # Con pendiente positiva
+    # With positive slope
     pos_mask = has_pos
     only1 = pos_mask & (nv <= 1)
     reason = np.where(only1, "only_1_point", reason)
@@ -360,7 +360,7 @@ def run_m1(parsed: dict, r2_threshold=0.6, allow2pt=True, use_drop=True, ion_sup
         "n_valid":  nv,
         "reason":   reason,
         "r2_full":  r2v,
-        "r2_drop":  np.nan,  # simplificado — drop ya considerado en best
+        "r2_drop":  np.nan,  # simplified — drop already considered in best
     })
 
     good_lin = lin_df[lin_df["ok"]].copy()
@@ -371,12 +371,12 @@ def run_m1(parsed: dict, r2_threshold=0.6, allow2pt=True, use_drop=True, ion_sup
                 n=N, r2_threshold=r2_threshold)
 
 # =============================================================================
-# MÓDULO QCR — DIAGNÓSTICO DE RÉPLICAS
+# QCR MODULE — REPLICATE DIAGNOSTICS
 # =============================================================================
 
 def run_qcr(parsed: dict, inj_threshold=0.70) -> dict:
-    """Diagnóstico de inyección (Nivel 1) + outliers por metabolito (Nivel 2).
-    Devuelve qcr_df y agg_df (tabla agregada para MetaboAnalyst)."""
+    """Injection diagnostics (Level 1) + per-feature outliers (Level 2).
+    Returns qcr_df and agg_df (aggregated table for MetaboAnalyst)."""
     raw          = parsed["raw"]
     samp_df      = parsed["samp_df"]
     real_samples = parsed["real_samples"]
@@ -389,43 +389,43 @@ def run_qcr(parsed: dict, inj_threshold=0.70) -> dict:
         for ri, col in enumerate(cols, 1):
             vals = pd.to_numeric(raw[col], errors="coerce")
             vals = vals[(vals > 0) & vals.notna()]
-            rep_stats.append({"Sample": s, "Replica": ri, "Column": col,
-                               "Suma_int": float(vals.sum()),
-                               "Mediana_int": float(vals.median()) if len(vals) else 0.0})
+            rep_stats.append({"Sample": s, "Replicate": ri, "Column": col,
+                               "Sum_int": float(vals.sum()),
+                               "Median_int": float(vals.median()) if len(vals) else 0.0})
 
-        sums = sorted(r["Suma_int"]    for r in rep_stats)
-        meds = sorted(r["Mediana_int"] for r in rep_stats)
+        sums = sorted(r["Sum_int"]    for r in rep_stats)
+        meds = sorted(r["Median_int"] for r in rep_stats)
         med_sum = sums[len(sums)//2]
         med_med = meds[len(meds)//2]
 
         for r in rep_stats:
-            fs = med_sum > 0 and r["Suma_int"]    < inj_threshold * med_sum
-            fm = med_med > 0 and r["Mediana_int"] < inj_threshold * med_med
-            r["Falla_suma"] = fs; r["Falla_med"] = fm
-            r["Estado"]     = "fail" if (fs and fm) else "suspect" if (fs or fm) else "ok"
-            r["Recomendacion"] = ("Excluir replica"     if r["Estado"] == "fail" else
-                                  "Revisar manualmente" if r["Estado"] == "suspect" else
-                                  "Sin incidencias")
+            fs = med_sum > 0 and r["Sum_int"]    < inj_threshold * med_sum
+            fm = med_med > 0 and r["Median_int"] < inj_threshold * med_med
+            r["Fail_sum"] = fs; r["Fail_median"] = fm
+            r["Status"]     = "fail" if (fs and fm) else "suspect" if (fs or fm) else "ok"
+            r["Recommendation"] = ("Exclude replicate"     if r["Status"] == "fail" else
+                                  "Review manually" if r["Status"] == "suspect" else
+                                  "No issues")
             qcr_rows.append(r)
 
     qcr_df = pd.DataFrame(qcr_rows)
 
-    # Nivel 2: outliers por metabolito en réplicas válidas — vectorizado
+    # Level 2: per-feature outliers in valid replicates — vectorised
     outlier_counts = {}
     for s in real_samples:
-        valid = qcr_df[(qcr_df["Sample"]==s) & (qcr_df["Estado"]!="fail")]
+        valid = qcr_df[(qcr_df["Sample"]==s) & (qcr_df["Status"]!="fail")]
         vcols = valid["Column"].tolist()
         if len(vcols) < 2:
             continue
-        # Matriz (N_metabolitos × n_replicas_validas)
+        # Matrix (N_features × n_valid_replicates)
         mat_v = raw[vcols].apply(pd.to_numeric, errors="coerce").replace(0, np.nan).values
         with np.errstate(invalid="ignore", divide="ignore"):
             mn  = np.nanmean(mat_v, axis=1, keepdims=True)
             sd  = np.nanstd(mat_v,  axis=1, keepdims=True, ddof=0)
             z   = np.where(sd > 0, np.abs(mat_v - mn) / sd, 0)
             out = z > 2   # (N, n_valid_reps) bool
-        # Contar outliers por réplica
-        for ri_idx, rep_num in enumerate(valid["Replica"].tolist()):
+        # Count outliers per replicate
+        for ri_idx, rep_num in enumerate(valid["Replicate"].tolist()):
             cnt = int(np.nansum(out[:, ri_idx]))
             outlier_counts[(s, rep_num)] = cnt
 
@@ -435,22 +435,22 @@ def run_qcr(parsed: dict, inj_threshold=0.70) -> dict:
     # has zero rows AND zero columns. We rebuild a well-formed empty frame so
     # downstream code (and the legacy dict consumers) sees the expected
     # schema.
-    _QCR_COLS = ["Sample", "Replica", "Column", "Suma_int", "Mediana_int",
-                 "Falla_suma", "Falla_med", "Estado", "Recomendacion",
+    _QCR_COLS = ["Sample", "Replicate", "Column", "Sum_int", "Median_int",
+                 "Fail_sum", "Fail_median", "Status", "Recommendation",
                  "N_outliers"]
     if len(qcr_df) == 0:
         qcr_df = pd.DataFrame(columns=_QCR_COLS)
     else:
         qcr_df["N_outliers"] = qcr_df.apply(
-            lambda r: outlier_counts.get((r["Sample"], r["Replica"]), 0), axis=1)
-        qcr_df.loc[(qcr_df["Estado"] == "ok") & (qcr_df["N_outliers"] > N * 0.05),
-                   "Recomendacion"] = "Outliers elevados"
+            lambda r: outlier_counts.get((r["Sample"], r["Replicate"]), 0), axis=1)
+        qcr_df.loc[(qcr_df["Status"] == "ok") & (qcr_df["N_outliers"] > N * 0.05),
+                   "Recommendation"] = "High outliers"
 
-    # Tabla agregada — vectorizada
+    # Aggregated table — vectorised
     meta_cols = [c for c in ["Bucket label","RT","m/z","Name","Formula"] if c in raw.columns]
     agg_df    = raw[meta_cols].copy()
     for s in real_samples:
-        valid_cols = qcr_df[(qcr_df["Sample"]==s) & (qcr_df["Estado"]!="fail")]["Column"].tolist()
+        valid_cols = qcr_df[(qcr_df["Sample"]==s) & (qcr_df["Status"]!="fail")]["Column"].tolist()
         if not valid_cols:
             agg_df[f"S{s}"] = np.nan
             continue
@@ -463,13 +463,13 @@ def run_qcr(parsed: dict, inj_threshold=0.70) -> dict:
         agg_df[f"S{s}"] = np.nanmean(clean, axis=1)
 
     return dict(qcr_df=qcr_df, agg_df=agg_df,
-                n_fail=int((qcr_df["Estado"]=="fail").sum()),
-                n_suspect=int((qcr_df["Estado"]=="suspect").sum()),
-                n_ok=int((qcr_df["Estado"]=="ok").sum()),
+                n_fail=int((qcr_df["Status"]=="fail").sum()),
+                n_suspect=int((qcr_df["Status"]=="suspect").sum()),
+                n_ok=int((qcr_df["Status"]=="ok").sum()),
                 n_outlier_total=int(qcr_df["N_outliers"].sum()))
 
 # =============================================================================
-# MÓDULO 2 — CV / ICC
+# MODULE 2 — CV / ICC
 # =============================================================================
 
 def _safe_cv(vals):
@@ -487,14 +487,14 @@ def run_m2(parsed: dict, cv_threshold=20, qc_cv_thresh=15, detect_alert=70) -> d
     N            = len(raw)
     n_rep        = parsed["reps_per_sample"]
 
-    # CV por muestra — vectorizado
+    # CV per sample — vectorised
     cv_by_samp = {}
     det_any1   = {}
     det_allr   = {}
     for s in real_samples:
         cols    = samp_df[samp_df["sample_n"]==s]["col"].tolist()
         mat_num = raw[cols].apply(pd.to_numeric, errors="coerce").replace(0, np.nan)
-        # CV fila a fila vectorizado
+        # Row-by-row CV, vectorised
         mn = mat_num.mean(axis=1)
         sd = mat_num.std(axis=1, ddof=1)
         cv = (sd / mn * 100).where(mn > 0)
@@ -511,7 +511,7 @@ def run_m2(parsed: dict, cv_threshold=20, qc_cv_thresh=15, detect_alert=70) -> d
     cv_df["CV_max"]    = cv_df[cv_cols].max(axis=1)
     cv_df["CV_ok"]     = cv_df["CV_median"] <= cv_threshold
 
-    # Detección
+    # Detection
     det_df = pd.DataFrame({
         "Sample": real_samples,
         "n_any1": [det_any1[s].sum() for s in real_samples],
@@ -520,7 +520,7 @@ def run_m2(parsed: dict, cv_threshold=20, qc_cv_thresh=15, detect_alert=70) -> d
     det_df["pct_all"] = 100 * det_df["n_allr"] / N
     problematic = det_df[det_df["pct_all"] < detect_alert]
 
-    # CV QC norm — vectorizado
+    # CV QC norm — vectorised
     if len(qc_norm_df):
         qc_mat = raw[qc_norm_df["col"].tolist()].apply(pd.to_numeric, errors="coerce").replace(0, np.nan)
         mn_qc  = qc_mat.mean(axis=1)
@@ -529,8 +529,8 @@ def run_m2(parsed: dict, cv_threshold=20, qc_cv_thresh=15, detect_alert=70) -> d
     else:
         cv_qc = np.array([])
 
-    # ICC — vectorizado con matrices numpy (mucho más rápido que el bucle por metabolito)
-    # Construir matriz (N_metabolitos × N_total_réplicas) con etiquetas de grupo
+    # ICC — vectorised with numpy matrices (much faster than the per-feature loop)
+    # Build matrix (N_features × N_total_replicates) with group labels
     all_cols   = []
     group_ids  = []
     for gi, s in enumerate(real_samples):
@@ -539,13 +539,13 @@ def run_m2(parsed: dict, cv_threshold=20, qc_cv_thresh=15, detect_alert=70) -> d
         group_ids.extend([gi] * len(cols))
 
     mat = raw[all_cols].apply(pd.to_numeric, errors="coerce").replace(0, np.nan).values
-    # mat shape: (N_metabolitos, N_total_replicas)
+    # mat shape: (N_features, N_total_replicates)
     # Ensure int dtype: when real_samples is empty (e.g. all-QC experiments
     # such as the Sigma synthetic plasma case study), np.array([]) defaults
     # to float64, which np.bincount rejects.
     group_ids = np.asarray(group_ids, dtype=np.int64)
     n_groups  = len(real_samples)
-    n_reps    = n_rep  # réplicas por muestra (asumido uniforme)
+    n_reps    = n_rep  # replicates per sample (assumed uniform)
 
     icc_vec = np.full(N, np.nan)
 
@@ -607,10 +607,10 @@ def run_m2(parsed: dict, cv_threshold=20, qc_cv_thresh=15, detect_alert=70) -> d
 
     if not uniform_reps:
         # ── Vectorised non-uniform path ───────────────────────────────────
-        # Loops over GROUPS (≈ n_samples) instead of metabolites (≈ N).
-        # Each iteration is fully vectorised across all N metabolites,
-        # so e.g. 105 groups × 4595 metabolites runs in ~1 s rather than
-        # the previous ~minutes of per-metabolite Python.
+        # Loops over GROUPS (≈ n_samples) instead of features (≈ N).
+        # Each iteration is fully vectorised across all N features,
+        # so e.g. 105 groups × 4595 features runs in ~1 s rather than
+        # the previous ~minutes of per-feature Python.
         valid_full = ~np.isnan(mat)                     # (N, n_total_cols)
         n_per_group = np.zeros((N, n_groups), dtype=float)
         gm = np.full((N, n_groups), np.nan)
@@ -632,7 +632,7 @@ def run_m2(parsed: dict, cv_threshold=20, qc_cv_thresh=15, detect_alert=70) -> d
         n_groups_with_data = (n_per_group > 0).sum(axis=1)
         do_calc = (n_groups_with_data >= 2) & (n_total_per_met >= 4)
 
-        # Grand mean per metabolite, NaN-safe
+        # Grand mean per feature, NaN-safe
         with np.errstate(invalid="ignore", divide="ignore"):
             mat_safe_full = np.where(valid_full, mat, 0.0)
             grand = np.where(n_total_per_met > 0,
@@ -681,44 +681,44 @@ def run_m2(parsed: dict, cv_threshold=20, qc_cv_thresh=15, detect_alert=70) -> d
 
 
 # =============================================================================
-# ANÁLISIS ALTERNATIVO — exclusión de réplicas fail/suspect/manual
+# ALTERNATIVE ANALYSIS — exclusion of fail/suspect/manual replicates
 # =============================================================================
 
 def _parsed_without(parsed: dict, excluded_cols: set[str]) -> dict:
-    """Devuelve un `parsed` nuevo sin las columnas indicadas en
-    samp_df. Las cabeceras del CSV (`raw`) se conservan intactas —
-    `run_m1/m2/qcr` solo leen las columnas que samp_df les pasa, así que
-    basta con filtrar samp_df para que el resto del pipeline use solo
-    las réplicas válidas. No imputa nada — muestras con 0/1 réplica
-    válidas quedan con ese n efectivo (el CV se deja NaN, la media
-    agregada se calcula con los valores que haya)."""
+    """Return a new `parsed` without the indicated columns in
+    samp_df. The CSV headers (`raw`) are kept intact —
+    `run_m1/m2/qcr` only read the columns that samp_df gives them, so
+    filtering samp_df is enough for the rest of the pipeline to use only
+    the valid replicates. Nothing is imputed — samples with 0/1 valid
+    replicates keep that effective n (the CV is left NaN, the aggregated
+    mean is computed with the values available)."""
     samp_df = parsed["samp_df"]
     keep    = ~samp_df["col"].isin(excluded_cols)
     samp_df_new = samp_df[keep].copy()
 
-    # Renumerar rep dentro de cada muestra para que quede contiguo
-    # (1, 2, 3, ...) — útil para que CV_S{n} siga construyéndose bien.
-    # La columna 'rep' puede no existir en todas las versiones; si no,
-    # no pasa nada (samp_df["sample_n"] basta para el resto del pipeline).
+    # Renumber rep within each sample so that it stays contiguous
+    # (1, 2, 3, ...) — useful so that CV_S{n} keeps being built correctly.
+    # The 'rep' column may not exist in all versions; if not,
+    # it does not matter (samp_df["sample_n"] is enough for the rest of the pipeline).
     if "rep" in samp_df_new.columns:
         samp_df_new["rep"] = (samp_df_new
                                .groupby("sample_n")
                                .cumcount() + 1)
 
-    # reps_per_sample — tomar el máximo para preservar el contrato con
-    # run_m2.reshape (que asume n_rep uniforme). Si ya no lo es, se
-    # marca como -1 para que el consumidor sepa que es variable.
+    # reps_per_sample — take the maximum to preserve the contract with
+    # run_m2.reshape (which assumes uniform n_rep). If it no longer is, it
+    # is marked as -1 so that the consumer knows it is variable.
     n_per_sample = samp_df_new.groupby("sample_n").size()
     if len(n_per_sample) and n_per_sample.nunique() == 1:
         reps_per_sample = int(n_per_sample.iloc[0])
     else:
         reps_per_sample = int(n_per_sample.max()) if len(n_per_sample) else 0
 
-    # Muestras que se han quedado sin ninguna réplica válida: se excluyen
-    # del listado real_samples para que no aparezcan como columnas vacías.
+    # Samples left without any valid replicate: they are excluded
+    # from the real_samples list so that they do not appear as empty columns.
     real_samples = sorted(samp_df_new["sample_n"].unique().tolist())
 
-    out = dict(parsed)  # shallow copy — raw se comparte (solo lectura)
+    out = dict(parsed)  # shallow copy — raw is shared (read-only)
     out["samp_df"]         = samp_df_new
     out["real_samples"]    = real_samples
     out["n_samples"]       = len(real_samples)
@@ -727,7 +727,7 @@ def _parsed_without(parsed: dict, excluded_cols: set[str]) -> dict:
 
 
 def _n_effective_per_sample(samp_df: pd.DataFrame) -> pd.DataFrame:
-    """Devuelve un DataFrame con columnas [Sample, n_valid_reps]."""
+    """Return a DataFrame with columns [Sample, n_valid_reps]."""
     grp = samp_df.groupby("sample_n").size().reset_index(name="n_valid_reps")
     grp = grp.rename(columns={"sample_n": "Sample"})
     return grp
@@ -735,22 +735,22 @@ def _n_effective_per_sample(samp_df: pd.DataFrame) -> pd.DataFrame:
 
 def build_excluded_cols(qcr: dict, mode: str,
                         manual_cols: list[str] | None = None) -> list[str]:
-    """Dado el resultado de run_qcr y un modo de exclusión, devuelve la
-    lista de columnas (nombres completos del CSV) a descartar.
+    """Given the run_qcr result and an exclusion mode, return the
+    list of columns (full CSV names) to discard.
 
     mode ∈ {"none", "fail", "fail_suspect", "manual"}
-    manual_cols: solo se usa cuando mode == "manual".
+    manual_cols: only used when mode == "manual".
     """
     df = qcr["qcr_df"]
     if mode == "none":
         return []
     if mode == "fail":
-        return df[df["Estado"] == "fail"]["Column"].tolist()
+        return df[df["Status"] == "fail"]["Column"].tolist()
     if mode == "fail_suspect":
-        return df[df["Estado"].isin(["fail", "suspect"])]["Column"].tolist()
+        return df[df["Status"].isin(["fail", "suspect"])]["Column"].tolist()
     if mode == "manual":
         return list(manual_cols or [])
-    raise ValueError(f"Modo de exclusión desconocido: {mode}")
+    raise ValueError(f"Unknown exclusion mode: {mode}")
 
 
 def run_alternative_analysis(
@@ -767,17 +767,17 @@ def run_alternative_analysis(
     inj_threshold: float = 0.70,
     detect_alert: float = 70,
 ) -> dict:
-    """Re-ejecuta el pipeline completo (QCR + M1 + M2) sobre un subconjunto
-    de réplicas, sin imputación. Devuelve un dict con los mismos campos
-    que el análisis original + metadatos del modo aplicado:
+    """Re-run the full pipeline (QCR + M1 + M2) on a subset of
+    replicates, without imputation. Returns a dict with the same fields
+    as the original analysis + metadata of the mode applied:
 
         { "mode", "excluded_cols", "excluded_rows", "n_excluded",
           "m1_alt", "qcr_alt", "m2_alt",
           "n_eff_per_sample", "samples_dropped" }
 
-    `excluded_rows` es un DataFrame con las filas completas del qcr_df
-    original para las réplicas descartadas (útil para documentación).
-    `samples_dropped` lista las muestras que se quedaron con 0 réplicas.
+    `excluded_rows` is a DataFrame with the complete rows of the original
+    qcr_df for the discarded replicates (useful for documentation).
+    `samples_dropped` lists the samples left with 0 replicates.
     """
     excluded_cols = build_excluded_cols(qcr, mode, manual_cols)
     excluded_rows = qcr["qcr_df"][qcr["qcr_df"]["Column"].isin(excluded_cols)].copy()
@@ -785,12 +785,12 @@ def run_alternative_analysis(
     parsed_alt = _parsed_without(parsed, set(excluded_cols))
     n_eff      = _n_effective_per_sample(parsed_alt["samp_df"])
 
-    # Muestras que aparecían en el original pero se han quedado sin réplicas
+    # Samples present in the original that are left without replicates
     orig_samples = set(parsed["real_samples"])
     alt_samples  = set(parsed_alt["real_samples"])
     samples_dropped = sorted(orig_samples - alt_samples)
 
-    # Volver a correr QCR + M1 + M2 con las réplicas válidas
+    # Re-run QCR + M1 + M2 with the valid replicates
     qcr_alt = run_qcr(parsed_alt, inj_threshold=inj_threshold)
     m1_alt  = run_m1(parsed_alt, r2_threshold=r2_threshold,
                      allow2pt=allow2pt, use_drop=use_drop, ion_sup=ion_sup)
@@ -798,9 +798,9 @@ def run_alternative_analysis(
         m2_alt = run_m2(parsed_alt, cv_threshold=cv_threshold,
                         qc_cv_thresh=qc_cv_thresh, detect_alert=detect_alert)
     except Exception as e:
-        # Si algún sample queda con 1 réplica y rompe el reshape de ICC,
-        # devolvemos m2=None y el consumidor puede degradar
-        # elegantemente (la UI ya sabe manejar modo="linealidad").
+        # If some sample is left with 1 replicate and breaks the ICC reshape,
+        # we return m2=None and the consumer can degrade
+        # gracefully (the UI already handles modo="linealidad").
         m2_alt = None
         m2_error = str(e)
     else:

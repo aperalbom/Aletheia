@@ -21,7 +21,7 @@ Integration (in pages/sol_analyzer.py)
 4. On click "Continue", call :func:`core.loaders.mapping_io.apply_mapping`
    and proceed with ``ds.to_legacy_dict()`` → ``run_m1``.
 
-Styling matches the IMSMI palette (good=#4A9B8F, slate=#6A7FA8,
+Styling matches the Aletheia palette (good=#4A9B8F, slate=#6A7FA8,
 amber=#E8A838, bad=#C0756A, dim=#888780).
 """
 
@@ -31,6 +31,8 @@ from typing import Any
 
 from dash import dash_table, dcc, html
 
+from sol_analyzer_dash.core.i18n import t
+
 from sol_analyzer_dash.core.schema import (
     ParsedDataset, SampleRecord,
     ROLE_SAMPLE, ROLE_QC_POOL, ROLE_QC_DIL, ROLE_BLANK, ROLE_EXCLUDE,
@@ -38,13 +40,15 @@ from sol_analyzer_dash.core.schema import (
 )
 
 
-_ROLE_OPTIONS = [
-    {"label": "Sample",       "value": ROLE_SAMPLE},
-    {"label": "QC pool",      "value": ROLE_QC_POOL},
-    {"label": "QC dilution",  "value": ROLE_QC_DIL},
-    {"label": "Blank",        "value": ROLE_BLANK},
-    {"label": "Exclude",      "value": ROLE_EXCLUDE},
-]
+def _role_options() -> list[dict[str, str]]:
+    """Dropdown options of the role column (built per request: language-dependent)."""
+    return [
+        {"label": t("Sample"),   "value": ROLE_SAMPLE},
+        {"label": "QC pool",     "value": ROLE_QC_POOL},
+        {"label": "QC dilution", "value": ROLE_QC_DIL},
+        {"label": t("Blank"),    "value": ROLE_BLANK},
+        {"label": t("Exclude"),  "value": ROLE_EXCLUDE},
+    ]
 
 
 def _record_to_row(r: SampleRecord) -> dict[str, Any]:
@@ -129,26 +133,26 @@ def layout(ds: ParsedDataset, *, table_id: str = "sm-table",
     counts = _summarise(rows)
 
     columns = [
-        {"name": "Column name",  "id": "column_name",   "editable": False,
+        {"name": t("Column name"),  "id": "column_name",   "editable": False,
          "type": "text"},
-        {"name": "Sample ID",    "id": "sample_id",     "editable": True,
+        {"name": t("Sample ID"),    "id": "sample_id",     "editable": True,
          "type": "text"},
-        {"name": "Replicate #",  "id": "replicate_num", "editable": True,
+        {"name": t("Replicate #"),  "id": "replicate_num", "editable": True,
          "type": "numeric"},
-        {"name": "Role",         "id": "role",          "editable": True,
+        {"name": t("Role"),         "id": "role",          "editable": True,
          "presentation": "dropdown"},
-        {"name": "Dilution %",   "id": "dilution_level","editable": True,
+        {"name": t("Dilution %"),   "id": "dilution_level","editable": True,
          "type": "numeric"},
     ]
 
     return html.Div([
         _card(
-            f"Sample mapping — source format: {ds.source_format} · "
-            f"{len(ds.samples)} columns",
+            t("Sample mapping — source format: {fmt} · {n} columns",
+              fmt=ds.source_format, n=len(ds.samples)),
             html.Div(
-                f"Auto-classification is a starting point only. Refine roles "
-                f"and dilution levels below; click Save mapping to persist "
-                f"the choices as a sidecar JSON.",
+                t("Auto-classification is a starting point only. Refine roles "
+                  "and dilution levels below; click Save mapping to persist "
+                  "the choices as a sidecar JSON."),
                 style={"fontSize": "12px", "color": PAL["dim"],
                        "marginBottom": ".8rem", "lineHeight": "1.5"},
             ),
@@ -184,7 +188,7 @@ def layout(ds: ParsedDataset, *, table_id: str = "sm-table",
                      "backgroundColor": "rgba(192,117,106,0.08)",
                      "color": PAL["dim"]},
                 ],
-                dropdown={"role": {"options": _ROLE_OPTIONS}},
+                dropdown={"role": {"options": _role_options()}},
             ),
         ),
     ])
@@ -200,9 +204,9 @@ def _summarise(rows: list[dict[str, Any]]) -> dict[str, int]:
 
 def _render_summary(counts: dict[str, int]) -> list:
     chips = []
-    label_for = {ROLE_SAMPLE: "Sample", ROLE_QC_POOL: "QC pool",
-                 ROLE_QC_DIL: "QC dil", ROLE_BLANK: "Blank",
-                 ROLE_EXCLUDE: "Exclude"}
+    label_for = {ROLE_SAMPLE: t("Sample"), ROLE_QC_POOL: "QC pool",
+                 ROLE_QC_DIL: "QC dil", ROLE_BLANK: t("Blank"),
+                 ROLE_EXCLUDE: t("Exclude")}
     color_for = {ROLE_SAMPLE: PAL["neutral"], ROLE_QC_POOL: PAL["good"],
                  ROLE_QC_DIL: PAL["slate"], ROLE_BLANK: PAL["amber"],
                  ROLE_EXCLUDE: PAL["bad"]}

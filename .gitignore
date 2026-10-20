@@ -107,19 +107,12 @@ config.local.*
 # Dash / Flask runtime
 instance/
 flask_session/
-.informe_new.py
 
-# Claude Code / agent memory — internal notes, not for public repo
+# Internal agent notes — not for the public repo
 CLAUDE.md
 .claude/
 
-# Aletheia — sample history JSON contains real client/sample metadata
-# (names, SOL numbers, dates). NEVER commit this file.
-sol_analyzer_dash/data/sample_history.json
-
-# Ad-hoc debug / smoke / end-to-end scripts (live in package root,
-# outside the tests/ directory). Convention: leading underscore =
-# private/experimental.
+# Ad-hoc debug / smoke scripts (leading underscore = private/experimental)
 sol_analyzer_dash/_*.py
 sol_analyzer_dash/test_*.py
 *.pyc

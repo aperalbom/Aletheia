@@ -9,6 +9,6 @@ MZmine 3, XCMS, MS-DIAL, generic CSV).
 See README.md or https://github.com/aperalbom/Aletheia for usage.
 """
 
-__version__ = "1.0.0"
+__version__ = "1.0.1"
 __author__  = "Ángela Peralbo-Molina and contributors"
 __license__ = "MIT"
