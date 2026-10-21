@@ -8,7 +8,7 @@ import pytest
 PKG = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PKG.parent))
 
-from sol_analyzer_dash.core import i18n  # noqa: E402
+from aletheia.core import i18n  # noqa: E402
 
 
 @pytest.fixture(autouse=True)

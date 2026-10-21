@@ -169,7 +169,7 @@ def main():
     print(json.dumps(sys_info, indent=2))
 
     aletheia_cmd = [
-        sys.executable, "-m", "sol_analyzer_dash.cli", "run",
+        sys.executable, "-m", "aletheia.cli", "run",
         str(csv_path),
         "--out",     str(out_dir / "aletheia_output"),
         "--format",  args.format,

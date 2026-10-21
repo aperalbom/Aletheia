@@ -1,15 +1,15 @@
 """
 app.py — Aletheia web interface (entry point)
 Arranca con:
-    python sol_analyzer_dash/app.py              (from the repository root)
-    python -m sol_analyzer_dash.app              (also from the repository root)
-    cd sol_analyzer_dash && python app.py        (legacy mode)
+    python aletheia/app.py              (from the repository root)
+    python -m aletheia.app              (also from the repository root)
+    cd aletheia && python app.py        (legacy mode)
 Opens at:     http://localhost:8050
 """
 
 # ---------------------------------------------------------------------------
 # Path bootstrap: the codebase uses bare imports (``from core.X import ...``,
-# ``import pages.Y``) instead of fully-qualified ``sol_analyzer_dash.core.X``.
+# ``import pages.Y``) instead of fully-qualified ``aletheia.core.X``.
 # To make every invocation form above resolve, we put the package directory
 # on ``sys.path`` *before* any of those imports. Tests do the equivalent via
 # their own ``sys.path.insert`` lines; the CLI does it too. Keep this block
@@ -21,7 +21,7 @@ _HERE = Path(__file__).resolve().parent
 # Add the package directory so bare imports (``from core.X import …``) resolve.
 if str(_HERE) not in sys.path:
     sys.path.insert(0, str(_HERE))
-# Also add the parent so fully-qualified imports (``from sol_analyzer_dash.core …``)
+# Also add the parent so fully-qualified imports (``from aletheia.core …``)
 # work regardless of the working directory the user launches from.
 _PARENT = _HERE.parent
 if str(_PARENT) not in sys.path:
@@ -37,7 +37,7 @@ app = Dash(
     use_pages=True,
     # Pass an absolute path so Dash finds the pages folder regardless of
     # whether the app was launched as a script (``python app.py``) or as a
-    # module (``python -m sol_analyzer_dash.app``) from a different cwd.
+    # module (``python -m aletheia.app``) from a different cwd.
     pages_folder=str(_HERE / "pages"),
     assets_folder=str(_HERE / "assets"),
     suppress_callback_exceptions=True,
@@ -47,23 +47,16 @@ app.title = "Aletheia"
 
 
 from core.cache import load as cload
+from core.analysis import combined_table
 from core.i18n import t, get_lang, COOKIE as LANG_COOKIE
-from sol_analyzer_dash import __version__
+from aletheia import __version__
 
 # =============================================================================
 # DOWNLOAD ENDPOINTS — nothing is downloaded automatically, the user chooses when
 # =============================================================================
 
 def _combined_df(d):
-    lin_cols = ["label","Name","ok","r2","strategy","n_valid","reason"]
-    lin_cols = [c for c in lin_cols if c in d["m1"]["lin_df"].columns]
-    lin = d["m1"]["lin_df"][lin_cols].copy()
-    if d["m2"]:
-        lin["CV_median"] = d["m2"]["cv_df"]["CV_median"].values
-        lin["CV_ok"]     = d["m2"]["cv_df"]["CV_ok"].values
-        lin["ICC"]       = d["m2"]["icc_vec"]
-        lin["pass_both"] = lin["ok"] & lin["CV_ok"]
-    return lin
+    return combined_table(d["m1"]["lin_df"], d["m2"])
 
 def _sel(df, cols):
     """Select only columns that actually exist in df (safe fallback)."""

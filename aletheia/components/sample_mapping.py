@@ -31,9 +31,9 @@ from typing import Any
 
 from dash import dash_table, dcc, html
 
-from sol_analyzer_dash.core.i18n import t
+from aletheia.core.i18n import t
 
-from sol_analyzer_dash.core.schema import (
+from aletheia.core.schema import (
     ParsedDataset, SampleRecord,
     ROLE_SAMPLE, ROLE_QC_POOL, ROLE_QC_DIL, ROLE_BLANK, ROLE_EXCLUDE,
     VALID_ROLES,

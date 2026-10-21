@@ -11,15 +11,15 @@ import dash
 from flask import send_file
 import tempfile, os, json, copy, dataclasses
 
-from sol_analyzer_dash.core.analysis import (parse_file, run_m1, run_qcr, run_m2,
+from aletheia.core.analysis import (parse_file, run_m1, run_qcr, run_m2,
                             run_alternative_analysis)
-from sol_analyzer_dash.core.cache    import save as csave, load as cload
-from sol_analyzer_dash.core.loaders  import load as load_dataset, sniff as sniff_format
-from sol_analyzer_dash.core.loaders.mapping_io import (apply_mapping, load_mapping_json,
+from aletheia.core.cache    import save as csave, load as cload
+from aletheia.core.loaders  import load as load_dataset, sniff as sniff_format
+from aletheia.core.loaders.mapping_io import (apply_mapping, load_mapping_json,
                                                        save_mapping_json)
-from sol_analyzer_dash.core.schema import ROLE_QC_DIL
-from sol_analyzer_dash.components import sample_mapping as smap
-from sol_analyzer_dash.core.i18n import t, get_lang  # noqa: F401
+from aletheia.core.schema import ROLE_QC_DIL
+from aletheia.components import sample_mapping as smap
+from aletheia.core.i18n import t, get_lang  # noqa: F401
 
 dash.register_page(__name__, path="/", name="Aletheia")
 

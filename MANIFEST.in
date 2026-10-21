@@ -1,0 +1,3 @@
+# Include the non-Python files of the web interface in source and wheel builds
+recursive-include aletheia/assets *
+include LICENSE README.md CITATION.cff

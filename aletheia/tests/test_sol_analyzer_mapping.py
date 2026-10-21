@@ -20,9 +20,9 @@ import dash                                                        # noqa: E402
 _app = dash.Dash(__name__, use_pages=True, pages_folder="",
                  suppress_callback_exceptions=True)
 
-from sol_analyzer_dash.pages import sol_analyzer as sa              # noqa: E402
-from sol_analyzer_dash.core.loaders import load                     # noqa: E402
-from sol_analyzer_dash.core.cache import save, load as cload        # noqa: E402
+from aletheia.pages import sol_analyzer as sa              # noqa: E402
+from aletheia.core.loaders import load                     # noqa: E402
+from aletheia.core.cache import save, load as cload        # noqa: E402
 
 FIXTURE = HERE / "fixture_metaboscape.csv"
 

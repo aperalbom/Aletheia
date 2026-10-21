@@ -42,14 +42,14 @@ import pandas as pd
 
 
 # ---------------------------------------------------------------------------
-# Path handling: when invoked as a script (`python -m sol_analyzer_dash.cli`)
+# Path handling: when invoked as a script (`python -m aletheia.cli`)
 # or via a console-script entry point, make sure sibling modules resolve.
 # ---------------------------------------------------------------------------
 HERE = Path(__file__).resolve().parent
 if str(HERE) not in sys.path:
     sys.path.insert(0, str(HERE))
 
-from core.analysis import run_m1, run_qcr, run_m2          # noqa: E402
+from core.analysis import run_m1, run_qcr, run_m2, combined_table  # noqa: E402
 from core.loaders  import load as load_dataset             # noqa: E402
 from core.loaders  import sniff as sniff_format             # noqa: E402
 from core.loaders  import available_formats                # noqa: E402
@@ -60,11 +60,11 @@ from core.loaders.mapping_io import (                       # noqa: E402
 
 try:
     # Prefer the version declared in the installed package metadata
-    # (sol_analyzer_dash/__init__.py + pyproject.toml).
-    from sol_analyzer_dash import __version__ as VERSION
+    # (aletheia/__init__.py + pyproject.toml).
+    from aletheia import __version__ as VERSION
 except Exception:
     # Fallback for in-tree execution without an installed package.
-    VERSION = "1.0.1"
+    VERSION = "1.0.2"
 
 
 # ---------------------------------------------------------------------------
@@ -194,11 +194,14 @@ def cmd_run(args: argparse.Namespace) -> int:
     n_passed = int(lin["good"].shape[0])
     pct_passed = round(100.0 * n_passed / max(1, n_features_in), 2)
 
-    # ---- 3. replicate diagnostic --------------------------------------
+    # ---- 3. replicate diagnostic and repeatability ---------------------
     rsd_after: float | None = None
     qcr_df = None
+    rep_summary: dict = {"repeatability_run": False}
     if n_samples_in >= 1:
-        print("[3/4] replicate diagnostic …", file=sys.stderr)
+        step3 = ("replicate diagnostic" if args.linearity_only else
+                 f"replicate diagnostic and repeatability (median %CV ≤ {args.cv:g}, ICC)")
+        print(f"[3/4] {step3} …", file=sys.stderr)
         try:
             qcr = run_qcr(parsed, inj_threshold=args.injection_threshold)
             qcr_df = qcr.get("qcr_df")
@@ -210,6 +213,32 @@ def cmd_run(args: argparse.Namespace) -> int:
         except Exception as e:
             print(f"warning: run_qcr failed: {e}", file=sys.stderr)
 
+        if not args.linearity_only:
+            try:
+                m2 = run_m2(parsed, cv_threshold=args.cv)
+                m2["cv_df"].to_csv(out_dir / "cv_per_sample.csv", index=False)
+                comb = combined_table(lin["lin_df"], m2)
+                comb.to_csv(out_dir / "combined_results.csv", index=False)
+                comb[comb["pass_both"]].to_csv(out_dir / "pass_all_criteria.csv",
+                                               index=False)
+                cv_med = m2["cv_df"]["CV_median"]
+                icc = pd.Series(m2["icc_vec"])
+                rep_summary = {
+                    "repeatability_run":      True,
+                    "n_cv_computable":        int(cv_med.notna().sum()),
+                    "n_cv_ok":                int(m2["cv_df"]["CV_ok"].sum()),
+                    "n_icc_gt_0_75":          int((icc > 0.75).sum()),
+                    "n_features_pass_both":   int(comb["pass_both"].sum()),
+                }
+            except Exception as e:
+                msg = f"repeatability module (M2) failed: {e}"
+                run_warnings.append(msg)
+                print(f"warning: {msg}", file=sys.stderr)
+    elif not args.linearity_only:
+        msg = "no study samples found: %CV and ICC were not calculated."
+        run_warnings.append(msg)
+        print(f"warning: {msg}", file=sys.stderr)
+
     # ---- 4. summary ----------------------------------------------------
     runtime = round(time.time() - t0, 2)
     summary = {
@@ -219,6 +248,7 @@ def cmd_run(args: argparse.Namespace) -> int:
         "n_features_in":       int(n_features_in),
         "n_features_passed":   n_passed,
         "pct_passed":          pct_passed,
+        **rep_summary,
         "rsd_qc_before_median": (round(rsd_before, 2) if rsd_before is not None else None),
         "rsd_qc_after_median":  (round(rsd_after,  2) if rsd_after  is not None else None),
         "n_samples_in":        int(n_samples_in),
@@ -284,7 +314,14 @@ def build_parser() -> argparse.ArgumentParser:
     p_run.add_argument("--r2", type=float, default=0.65,
                         help="R² threshold for the linearity filter.")
     p_run.add_argument("--cv", type=float, default=20.0,
-                        help="%%CV threshold for the repeatability filter.")
+                        help="threshold for the median %%CV across the injections "
+                             "of each sample (default 20). Used to decide the "
+                             "joint criterion (linearity and %%CV) written to "
+                             "pass_all_criteria.csv.")
+    p_run.add_argument("--linearity-only", action="store_true", default=False,
+                        help="skip the repeatability module (%%CV, ICC and the joint "
+                             "criterion) and run only linearity and the replicate "
+                             "diagnostic, as in versions up to 1.0.1.")
     p_run.add_argument("--injection-threshold", type=float, default=0.70,
                         help="global-failure threshold (fraction of within-sample median).")
     p_run.add_argument("--use-drop", action="store_true", default=True,

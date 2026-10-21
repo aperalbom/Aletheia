@@ -6,7 +6,7 @@ message: >-
   If you use this software in research, please cite both the software itself
   (this metadata) and the accompanying publication (preferred-citation below).
 type: software
-doi: "10.5281/zenodo.23493560"
+doi: "10.5281/zenodo.20641569"
 authors:
   - given-names: Ángela
     family-names: Peralbo-Molina
@@ -42,8 +42,8 @@ abstract: >-
   and emits curated feature tables together with a fully auditable per-feature
   decision log. Accepts CSV exports from Bruker MetaboScape, MZmine 3, XCMS
   and MS-DIAL, plus a generic CSV loader with manual sample mapping.
-version: 1.0.1
-date-released: "2026-10-20"
+version: 1.0.2
+date-released: "2026-10-21"
 license: MIT
 repository-code: "https://github.com/aperalbom/Aletheia"
 url: "https://github.com/aperalbom/Aletheia"

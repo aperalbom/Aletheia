@@ -79,13 +79,33 @@ together with a fully auditable per-feature decision log.
 
 ## Installation
 
-### From source
+### One-step installers (Windows, macOS, Linux)
+
+Install [Python 3.10 or later](https://www.python.org/downloads/) once (on
+Windows, tick *Add python.exe to PATH*), download or clone this repository and:
+
+- **Windows:** double-click `Aletheia_windows.bat`.
+- **macOS / Linux:** open a terminal in the folder and run
+  `bash Aletheia_mac_linux.command`.
+
+The first run creates a private environment (`.venv`) in the folder, installs
+Aletheia and its dependencies (internet connection needed) and opens the web
+interface at http://localhost:8050. The following runs only start the app.
+
+### From source (command line)
 
 ```bash
 git clone https://github.com/aperalbom/Aletheia.git
 cd Aletheia
+python -m venv .venv
+# Windows: .venv\Scripts\activate        macOS/Linux: source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
 pip install -e .                # editable install
 ```
+
+Upgrading pip first is necessary: pip older than 21.3 (for example the one that
+comes with the system Python of macOS) cannot install a project that only has a
+`pyproject.toml` and stops with *File "setup.py" not found*.
 
 ### Requirements
 
@@ -99,7 +119,7 @@ pip install -e .                # editable install
 ## Quick start — Dash UI
 
 ```bash
-python sol_analyzer_dash/app.py
+python aletheia/app.py
 # Open http://localhost:8050 in a browser
 ```
 
@@ -125,12 +145,15 @@ processing, CI/CD, and the reproducibility Docker image:
 # Auto-detect format and run with default thresholds
 aletheia run path/to/file.csv --out results/
 
-# Force a specific format + tune the linearity filter
+# Force a specific format + tune the linearity and %CV thresholds
 aletheia run path/to/file.csv \
   --out results/ \
   --format msdial \
   --r2 0.65 --cv 20 \
   --use-drop --allow-2pt --flag-non-monotonic
+
+# Linearity and replicate diagnostic only (skip %CV, ICC and the joint table)
+aletheia run path/to/file.csv --out results/ --linearity-only
 
 # Detect the format without running anything
 aletheia sniff path/to/file.csv
@@ -140,7 +163,13 @@ aletheia sniff path/to/file.csv
 The CLI writes the curated CSVs into `--out` plus an `aletheia_summary.json`
 file with `n_features_in`, `n_features_passed`, `pct_passed`,
 `rsd_qc_before_median`, `runtime_s`, any warnings (for example a missing QC
-dilution series) and the parameters used.
+dilution series) and the parameters used. Unless `--linearity-only` is given,
+it also runs the repeatability module and writes `cv_per_sample.csv`,
+`combined_results.csv` and `pass_all_criteria.csv` (features passing linearity
+and a median %CV across the injections of each sample at or below `--cv`);
+the summary then also reports `n_cv_ok`, `n_icc_gt_0_75` and
+`n_features_pass_both`. ICC is reported for information and is not part of the
+joint criterion.
 
 ## Sample-Mapping editor
 
@@ -168,9 +197,9 @@ curated assignment is reproduced without manual re-entry.
 | `experiment_aggregated.csv` | Per-sample average over valid replicates (ready for MetaboAnalyst) | ✓ | ✓ |
 | `aletheia_summary.json` | Machine-readable run summary | ✓ | |
 | `experiment_filtered.csv` | Original table restricted to accepted features | | ✓ |
-| `cv_per_sample.csv` | %CV per sample and feature | | ✓ |
-| `combined_results.csv` | Linearity + repeatability joint table (R², CV, ICC) | | ✓ |
-| `pass_all_criteria.csv` | Subset passing both filters | | ✓ |
+| `cv_per_sample.csv` | %CV per sample and feature | ✓ | ✓ |
+| `combined_results.csv` | Linearity + repeatability joint table (R², CV, ICC) | ✓ | ✓ |
+| `pass_all_criteria.csv` | Subset passing both filters | ✓ | ✓ |
 | `aletheia_report.pdf` | PDF run report (requires the `full` extra) | | ✓ |
 
 ## Computational benchmark
@@ -187,7 +216,7 @@ python benchmark_aletheia.py --csv path/to/feature_table.csv
 
 ```bash
 pip install -e .[dev]
-pytest                        # 62 tests covering the loaders, the legacy-dict
+pytest                        # 65 tests covering the loaders, the legacy-dict
                               # round-trip, sample mapping, the mapping editor
                               # of the web UI, the EN/ES interface texts, generic CSV and the CLI.
 ```
@@ -202,7 +231,7 @@ Aletheia/
 ├── pyproject.toml
 ├── requirements.txt
 ├── benchmark_aletheia.py
-└── sol_analyzer_dash/
+└── aletheia/
     ├── app.py                       ← Dash entry point (web UI)
     ├── cli.py                       ← `aletheia run|sniff|version`
     ├── core/
@@ -240,8 +269,8 @@ accompanying paper:
 > Chicano-Gálvez, E. (2026). *Aletheia: an open-source pipeline for QC
 > dilution-based feature filtering in untargeted LC–MS metabolomics and
 > lipidomics.* Metabolomics (submitted). Software: Zenodo,
-> https://doi.org/10.5281/zenodo.20641569 (all versions; v1.0.1:
-> https://doi.org/10.5281/zenodo.23493560).
+> https://doi.org/10.5281/zenodo.20641569 (all versions; each release has its
+> own version DOI, listed on that page).
 
 The GitHub-recognised `CITATION.cff` in this repository feeds the
 "Cite this repository" button (APA and BibTeX).

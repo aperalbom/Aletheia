@@ -680,6 +680,23 @@ def run_m2(parsed: dict, cv_threshold=20, qc_cv_thresh=15, detect_alert=70) -> d
                 real_samples=real_samples)
 
 
+def combined_table(lin_df: pd.DataFrame, m2: dict | None) -> pd.DataFrame:
+    """Per-feature table with the linearity result and, when the repeatability
+    module (M2) was run, its %CV / ICC and the joint decision ``pass_both``
+    (linearity accepted AND median %CV <= threshold).  Used by the web
+    interface (combined_results.csv, pass_all_criteria.csv) and by the
+    command line (``aletheia run``)."""
+    cols = [c for c in ["label", "Name", "ok", "r2", "strategy", "n_valid", "reason"]
+            if c in lin_df.columns]
+    out = lin_df[cols].copy()
+    if m2:
+        out["CV_median"] = m2["cv_df"]["CV_median"].values
+        out["CV_ok"]     = m2["cv_df"]["CV_ok"].values
+        out["ICC"]       = m2["icc_vec"]
+        out["pass_both"] = out["ok"] & out["CV_ok"]
+    return out
+
+
 # =============================================================================
 # ALTERNATIVE ANALYSIS — exclusion of fail/suspect/manual replicates
 # =============================================================================

@@ -19,7 +19,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-# Make sol_analyzer_dash importable from the test file regardless of pytest cwd.
+# Make aletheia importable from the test file regardless of pytest cwd.
 HERE = Path(__file__).resolve().parent
 PROJECT_ROOT = HERE.parent
 sys.path.insert(0, str(PROJECT_ROOT))

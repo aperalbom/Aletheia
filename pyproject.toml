@@ -12,7 +12,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "aletheia"
-version = "1.0.1"
+version = "1.0.2"
 description = "Quality-control pipeline for untargeted LC–MS metabolomics and lipidomics — per-feature linearity, two-tier replicate diagnostic, multi-format input."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -90,7 +90,7 @@ Documentation = "https://github.com/aperalbom/Aletheia#readme"
 
 # Console script entry point — installs `aletheia` on the user's PATH.
 [project.scripts]
-aletheia = "sol_analyzer_dash.cli:main"
+aletheia = "aletheia.cli:main"
 
 # ---------------------------------------------------------------------
 # setuptools — package discovery
@@ -100,13 +100,13 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["sol_analyzer_dash*"]
-exclude = ["sol_analyzer_dash.tests*"]
+include = ["aletheia*"]
+exclude = ["aletheia.tests*"]
 
 # ---------------------------------------------------------------------
 # pytest — test discovery configuration
 # ---------------------------------------------------------------------
 [tool.pytest.ini_options]
-testpaths    = ["sol_analyzer_dash/tests"]
+testpaths    = ["aletheia/tests"]
 python_files = ["test_*.py"]
 addopts      = "-q"
