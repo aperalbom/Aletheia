@@ -94,14 +94,35 @@ interface at http://localhost:8050. The following runs only start the app.
 
 ### From source (command line)
 
-```bash
+Open a terminal (Command Prompt on Windows; Terminal on macOS or Linux) and run
+the commands of your system.
+
+**Windows (Command Prompt):**
+
+```bat
 git clone https://github.com/aperalbom/Aletheia.git
 cd Aletheia
 python -m venv .venv
-# Windows: .venv\Scripts\activate        macOS/Linux: source .venv/bin/activate
+.venv\Scripts\activate
 python -m pip install --upgrade pip setuptools wheel
-pip install -e .                # editable install
+pip install -e ".[full]"
 ```
+
+**macOS / Linux (Terminal):**
+
+```bash
+git clone https://github.com/aperalbom/Aletheia.git
+cd Aletheia
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip setuptools wheel
+pip install -e ".[full]"
+```
+
+If git is not installed, use *Code → Download ZIP* on the GitHub page, unzip the
+file, open the terminal in the unzipped folder and continue from the
+`python -m venv` (`python3 -m venv`) command. `pip install -e .` (without
+`[full]`) is enough for the analysis; `[full]` adds the PDF report packages.
 
 Upgrading pip first is necessary: pip older than 21.3 (for example the one that
 comes with the system Python of macOS) cannot install a project that only has a
