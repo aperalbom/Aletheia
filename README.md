@@ -5,7 +5,7 @@
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)](https://www.python.org)
-[![DOI](https://img.shields.io/badge/DOI-pending-lightgrey.svg)](#citation)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.20641569.svg)](https://doi.org/10.5281/zenodo.20641569)
 [![Status](https://img.shields.io/badge/status-pre--release-orange.svg)](#)
 
 **Aletheia** is an open-source Python/Dash pipeline for quality-control
@@ -236,14 +236,15 @@ Online Resource 5 of the accompanying paper.
 If you use Aletheia in research, please cite both the software and the
 accompanying paper:
 
-> Peralbo-Molina, Á., López-Vázquez, C., Salinas-Gavilán, A. &
-> Chicano-Gálvez, E. (2026). *Aletheia: an open-source quality-control
-> pipeline for QC dilution-based feature filtering in untargeted LC–MS
-> metabolomics and lipidomics.* Metabolomics, [INSERT: vol., pages].
-> DOI: [INSERT: paper DOI].
+> Peralbo-Molina, Á., López, C. M., Salinas-Gavilán, A. &
+> Chicano-Gálvez, E. (2026). *Aletheia: an open-source pipeline for QC
+> dilution-based feature filtering in untargeted LC–MS metabolomics and
+> lipidomics.* Metabolomics (submitted). Software: Zenodo,
+> https://doi.org/10.5281/zenodo.20641569 (all versions; v1.0.1:
+> https://doi.org/10.5281/zenodo.23493560).
 
-A BibTeX entry and the GitHub-recognised `CITATION.cff` are provided in this
-repository.
+The GitHub-recognised `CITATION.cff` in this repository feeds the
+"Cite this repository" button (APA and BibTeX).
 
 ## Acknowledgements
 
