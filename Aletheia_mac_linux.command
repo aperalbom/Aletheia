@@ -7,6 +7,26 @@ cd "$(dirname "$0")" || exit 1
 
 pause_exit() { echo; read -r -p "Press Enter to close this window..." _; exit "${1:-1}"; }
 
+# Make sure the project files (pyproject.toml) are next to this installer.
+# If only this file was downloaded, fetch the whole project from GitHub first.
+if [ ! -f pyproject.toml ]; then
+  if [ ! -f Aletheia-main/pyproject.toml ]; then
+    URL="${ALETHEIA_ZIP_URL:-https://github.com/aperalbom/Aletheia/archive/refs/heads/main.zip}"
+    echo "The Aletheia project files were not found next to this installer."
+    echo "Downloading Aletheia from GitHub (internet connection needed) ..."
+    if ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1 || \
+       ! curl -fsSL "$URL" -o Aletheia_download.zip || ! unzip -q -o Aletheia_download.zip; then
+      rm -f Aletheia_download.zip
+      echo "Automatic download failed. Download the whole project instead: open"
+      echo "https://github.com/aperalbom/Aletheia , choose Code > Download ZIP, unzip it"
+      echo "and run this file again from inside the unzipped folder."
+      pause_exit 1
+    fi
+    rm -f Aletheia_download.zip
+  fi
+  cd Aletheia-main 2>/dev/null || { echo "The downloaded project was not found."; pause_exit 1; }
+fi
+
 PY=""
 for c in python3.13 python3.12 python3.11 python3.10 python3 python; do
   if command -v "$c" >/dev/null 2>&1 && \

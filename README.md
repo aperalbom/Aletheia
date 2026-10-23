@@ -92,6 +92,11 @@ The first run creates a private environment (`.venv`) in the folder, installs
 Aletheia and its dependencies (internet connection needed) and opens the web
 interface at http://localhost:8050. The following runs only start the app.
 
+If you download only the installer file (for example with *Raw → Save as* on
+GitHub), it first downloads the rest of the project from GitHub into a folder
+`Aletheia-main` next to itself and continues from there; it needs `curl` and
+`unzip` on macOS/Linux and PowerShell on Windows, which come with the system.
+
 ### From source (command line)
 
 Open a terminal (Command Prompt on Windows; Terminal on macOS or Linux) and run
